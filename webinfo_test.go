@@ -15,6 +15,138 @@ import (
 	"testing"
 )
 
+func makePNGBytes(w, h int) []byte {
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	fill := color.RGBA{R: 0x11, G: 0x22, B: 0x33, A: 0xff}
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			img.SetRGBA(x, y, fill)
+		}
+	}
+	var buf bytes.Buffer
+	_ = png.Encode(&buf, img)
+	return buf.Bytes()
+}
+
+func makeJPEGBytes(w, h int) []byte {
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	fill := color.RGBA{R: 0xaa, G: 0xbb, B: 0xcc, A: 0xff}
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			img.SetRGBA(x, y, fill)
+		}
+	}
+	var buf bytes.Buffer
+	_ = jpeg.Encode(&buf, img, &jpeg.Options{Quality: 80})
+	return buf.Bytes()
+}
+
+func makePNG(w, h int) []byte {
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	// fill with solid color
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			img.Set(x, y, color.RGBA{R: 0x11, G: 0x88, B: 0x22, A: 0xff})
+		}
+	}
+	var buf bytes.Buffer
+	_ = png.Encode(&buf, img)
+	return buf.Bytes()
+}
+
+func makeJPEG(w, h int) []byte {
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			img.Set(x, y, color.RGBA{R: 0x99, G: 0x44, B: 0x22, A: 0xff})
+		}
+	}
+	var buf bytes.Buffer
+	_ = jpeg.Encode(&buf, img, &jpeg.Options{Quality: 80})
+	return buf.Bytes()
+}
+
+func TestDownloadThumbnail_Temporary(t *testing.T) {
+	pngData := makePNG(200, 100)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/img.png" {
+			w.Header().Set("Content-Type", "image/png")
+			_, _ = w.Write(pngData)
+			return
+		}
+		http.NotFound(w, r)
+	})
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	info := &Webinfo{ImageURL: srv.URL + "/img.png"}
+	ctx := context.Background()
+
+	out, err := info.DownloadThumbnail(ctx, "", 100, true)
+	if err != nil {
+		t.Fatalf("DownloadThumbnail returned error: %v", err)
+	}
+	defer func() { _ = os.Remove(out) }()
+
+	f, ferr := os.Open(filepath.Clean(out))
+	if ferr != nil {
+		t.Fatalf("failed to open thumbnail: %v", ferr)
+	}
+	defer func() { _ = f.Close() }()
+	img, _, derr := image.Decode(f)
+	if derr != nil {
+		t.Fatalf("failed to decode thumbnail: %v", derr)
+	}
+	if img.Bounds().Dx() != 100 {
+		t.Fatalf("thumbnail width: want %d, got %d", 100, img.Bounds().Dx())
+	}
+}
+
+func TestDownloadThumbnail_Permanent(t *testing.T) {
+	jpgData := makeJPEG(300, 150)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/images/pic.jpg" {
+			w.Header().Set("Content-Type", "image/jpeg")
+			_, _ = w.Write(jpgData)
+			return
+		}
+		http.NotFound(w, r)
+	})
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	destDir := t.TempDir()
+	info := &Webinfo{ImageURL: srv.URL + "/images/pic.jpg"}
+	ctx := context.Background()
+
+	out, err := info.DownloadThumbnail(ctx, destDir, 50, false)
+	if err != nil {
+		t.Fatalf("DownloadThumbnail returned error: %v", err)
+	}
+	defer func() { _ = os.Remove(out) }()
+
+	// ensure file is in destDir and contains -thums
+	if filepath.Dir(out) != filepath.Clean(destDir) {
+		t.Fatalf("thumbnail path dir: want %q, got %q", destDir, filepath.Dir(out))
+	}
+	if !strings.Contains(filepath.Base(out), "-thums") {
+		t.Fatalf("thumbnail filename should contain -thums: %q", out)
+	}
+
+	f, ferr := os.Open(filepath.Clean(out))
+	if ferr != nil {
+		t.Fatalf("failed to open thumbnail: %v", ferr)
+	}
+	defer func() { _ = f.Close() }()
+	img, _, derr := image.Decode(f)
+	if derr != nil {
+		t.Fatalf("failed to decode thumbnail: %v", derr)
+	}
+	if img.Bounds().Dx() != 50 {
+		t.Fatalf("thumbnail width: want %d, got %d", 50, img.Bounds().Dx())
+	}
+}
+
 // minimal PNG/JPEG signatures for content-type detection
 var pngSig = []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 0}
 var jpgSig = []byte{0xff, 0xd8, 0xff, 0xe0, 0, 0, 'J', 'F', 'I', 'F'}
@@ -119,35 +251,6 @@ func TestDownloadImage_SniffingDeterminesExtension(t *testing.T) {
 	if !bytes.Equal(got, pngSig) {
 		t.Fatalf("content mismatch")
 	}
-}
-
-// helper to create a simple filled PNG
-func makePNGBytes(w, h int) []byte {
-	img := image.NewRGBA(image.Rect(0, 0, w, h))
-	// fill with a solid color
-	fill := color.RGBA{R: 0x11, G: 0x22, B: 0x33, A: 0xff}
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			img.SetRGBA(x, y, fill)
-		}
-	}
-	var buf bytes.Buffer
-	_ = png.Encode(&buf, img)
-	return buf.Bytes()
-}
-
-// helper to create a simple filled JPEG
-func makeJPEGBytes(w, h int) []byte {
-	img := image.NewRGBA(image.Rect(0, 0, w, h))
-	fill := color.RGBA{R: 0xaa, G: 0xbb, B: 0xcc, A: 0xff}
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			img.SetRGBA(x, y, fill)
-		}
-	}
-	var buf bytes.Buffer
-	_ = jpeg.Encode(&buf, img, &jpeg.Options{Quality: 80})
-	return buf.Bytes()
 }
 
 func TestDownloadThumbnail_NilReceiver(t *testing.T) {
