@@ -1,25 +1,25 @@
-# webinfo -- Extract metadata and structured information from web pages
+# [webinfo] -- Extract metadata and structured information from web pages
 
 [![lint status](https://github.com/goark/webinfo/workflows/lint/badge.svg)](https://github.com/goark/webinfo/actions)
 [![GitHub license](https://img.shields.io/badge/license-Apache%202-blue.svg)](https://raw.githubusercontent.com/goark/webinfo/master/LICENSE)
 [![GitHub release](http://img.shields.io/github/release/goark/webinfo.svg)](https://github.com/goark/webinfo/releases/latest)
 
-webinfo is a small Go module that extracts common metadata from web pages and provides utilities
+[`webinfo`][webinfo] is a small Go module that extracts common metadata from web pages and provides utilities
 to download representative images and create thumbnails.
 
-**Quick overview**
+## Quick overview
 
 - **Package**: `webinfo`
 - **Repository**: `github.com/goark/webinfo`
 - **Purpose**: fetch page metadata (title, description, canonical, image, etc.) and download images
 
-**Features**
+## Features
 
 - Fetch page metadata with `Fetch` (handles encodings and meta tag precedence).
 - Download an image referenced by `Webinfo.ImageURL` using `(*Webinfo).DownloadImage`.
 - Create a thumbnail from the referenced image using `(*Webinfo).DownloadThumbnail`.
 
-**Install**
+## Install
 
 Use Go modules (Go 1.25+ as used by the project):
 
@@ -27,7 +27,7 @@ Use Go modules (Go 1.25+ as used by the project):
 go get github.com/goark/webinfo@latest
 ```
 
-**Basic usage**
+## Basic usage
 
 Example showing fetch and download thumbnail (error handling omitted for brevity):
 
@@ -46,19 +46,20 @@ func main() {
     info, err := webinfo.Fetch(ctx, "https://example.com", "")
     if err != nil {
         fmt.Fprintln(os.Stderr, "error fetching webinfo:", err)
-        panic(err)
+        return
     }
 
     // Download thumbnail: width 150, to directory "thumbnails", permanent file
     thumbPath, err := info.DownloadThumbnail(ctx, "thumbnails", 150, false)
     if err != nil {
-        panic(err)
+        fmt.Fprintln(os.Stderr, "error downloading thumbnail:", err)
+        return
     }
     fmt.Println("thumbnail saved:", thumbPath)
 }
 ```
 
-**API notes**
+### API notes
 
 - `Fetch(ctx, url, userAgent)` — Parse and extract metadata. Pass an empty userAgent to use the module default.
 - `(*Webinfo).DownloadImage(ctx, destDir, temporary)` — Download the image in `Webinfo.ImageURL` and save it. If
@@ -68,12 +69,12 @@ func main() {
   creates a temporary file; when `temporary` is false the thumbnail file is named based on the original image
   name with `-thums` appended before the extension.
 
-**Error handling**
+### Error handling
 
 The package uses `github.com/goark/errs` for wrapping errors with contextual keys (e.g. `url`, `path`, `dir`).
 Callers should inspect returned errors accordingly.
 
-**Tests & development**
+### Tests & development
 
 - Run all tests: `go test ./...`
 - The repository includes `Taskfile.yml` tasks for common workflows; see that file for CI/test commands.
