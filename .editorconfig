@@ -3,19 +3,24 @@ root = true
 [*]
 end_of_line = lf
 charset = utf-8
-trim_trailing_whitespace = true
+trim_trailing_whitespace = false
 insert_final_newline = true
 indent_style = tab
 indent_size = 4
+
+[*.go]
+trim_trailing_whitespace = true
 
 [*.md]
 indent_style = space
 indent_size = 2
 
-[*.yml]
+[*.{yml,yaml}]
 indent_style = space
 indent_size = 2
+trim_trailing_whitespace = true
 
-[*.yaml]
+[*.toml]
 indent_style = space
 indent_size = 2
+trim_trailing_whitespace = true
