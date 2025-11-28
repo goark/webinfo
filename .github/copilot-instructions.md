@@ -44,7 +44,7 @@ Image download and thumbnail notes
 - `DownloadThumbnail` (added to `webinfo.go`) downloads the original image (via `DownloadImage`), resizes it to a requested width (preserving aspect ratio) and writes a thumbnail. Implementation notes:
   - The code currently uses a local nearest-neighbor scaler (no external `x/image/draw` dependency) to avoid adding module requirements.
   - The method accepts `width` (default 150 when <= 0), `destDir`, and `temporary` flags. When `destDir` is empty the method forces creation of a temporary file.
-  - When `temporary` is false, the thumbnail filename is derived from the original image basename with `-thums` appended before the extension.
+  - When `temporary` is false, the thumbnail filename is derived from the original image basename with `-thumb` appended before the extension.
 
 I/O and cleanup
 ----------------

@@ -68,7 +68,7 @@ func main() {
 - `(*Webinfo).DownloadThumbnail(ctx, destDir, width, temporary)` — Download the referenced image and produce a
   thumbnail resized to `width` pixels (height is preserved by aspect ratio). If `destDir` is empty the method
   creates a temporary file; when `temporary` is false the thumbnail file is named based on the original image
-  name with `-thums` appended before the extension.
+  name with `-thumb` appended before the extension.
 
 Note on defaults and test hooks:
 
