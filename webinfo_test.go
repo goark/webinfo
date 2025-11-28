@@ -258,7 +258,7 @@ func TestDownloadImage_ReadFullReturnsError(t *testing.T) {
 			StatusCode: 200,
 			Status:     "200 OK",
 			Header:     make(http.Header),
-			Body:       io.NopCloser(errReader{}),
+			Body:       errReader{},
 			Request:    req,
 		}, nil
 	})
