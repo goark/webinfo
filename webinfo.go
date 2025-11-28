@@ -15,7 +15,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/goark/errs"
 	"github.com/goark/fetch"
@@ -44,36 +43,51 @@ type Webinfo struct {
 	UserAgent   string `json:"user_agent,omitempty"`  // User-Agent used to fetch the page
 }
 
-// DownloadImage downloads the image referenced by w.ImageURL and saves it to the filesystem.
-// It returns the full path of the saved file or an error.
+// DownloadImage downloads the image pointed to by w.ImageURL and saves it to destDir,
+// returning the path of the saved file (outPath) or an error.
 //
-// Behavior
-//   - Validates receiver and ImageURL and returns wrapped errors (ErrNullPointer, ErrNoImageURL, etc.) on failure.
-//   - Creates destDir if non-empty using os.MkdirAll(destDir, 0o750). If destDir is empty, no directory is created
-//     (files are created relative to the current working directory; temporary files use the OS temp directory).
-//   - Performs an HTTP GET using a 15s timeout and the provided context (supports cancellation/timeout).
-//     The request sets a User-Agent via getUserAgent(w.UserAgent).
-//   - Determines the output file extension in this order:
-//     1) extension from the URL path,
-//     2) extension(s) inferred from the response Content-Type header,
-//     3) sniffing the first up to 512 bytes via http.DetectContentType,
-//     4) fallback to ".img" if none found.
-//     When sniffing, the read bytes are prepended back to the response body stream so the full image is written.
+// Behavior:
+//   - The method is a receiver on *Webinfo and will return an error if w is nil or if
+//     ImageURL is empty.
+//   - ctx is used to control/cancel the underlying HTTP request.
+//   - destDir is cleaned with filepath.Clean. If it is non-empty, the directory (and any
+//     required parents) will be created with mode 0750. If destDir is empty, file
+//     creation uses the system/default behavior for temporary or current directories.
+//   - If `temporary` is true, the image is written to a temporary file (created via
+//     the package-level `createFile` helper which wraps `os.CreateTemp`) and the
+//     temporary file path is returned. If the URL path does not contain a filename,
+//     `temporary` is forced true.
+//   - If `temporary` is false, the image is written to `destDir` with the filename
+//     taken from the URL path. If the URL filename has no extension, an extension is
+//     appended (see extension resolution below). Existing files will be truncated by
+//     the underlying `createFile`/`os.Create` behavior.
 //
-// Temporary vs permanent files
-//   - If temporary is true (or the URL path contains no usable filename), a temporary file is created with
-//     os.CreateTemp(destDir, "webinfo-image-*"+ext) and the image is written to it. The path to the temp file is returned.
-//   - If temporary is false, the filename from the URL is used; if that filename had no extension, the determined
-//     extension is appended. The file is created with os.Create(filepath.Join(destDir, srcFname)) and written.
+// HTTP download and content-type/extension resolution:
+//   - The image is fetched using an HTTP GET performed with the provided context; the
+//     request User-Agent is set via getUserAgent(w.UserAgent).
+//   - Extension resolution order:
+//     1) Extension from the URL path (if present).
+//     2) Extension(s) derived from the Content-Type response header via mime.ExtensionsByType.
+//     3) If still unknown, the first up-to-512 bytes of the body are read and
+//     http.DetectContentType is used to guess the content type, then mime.ExtensionsByType.
+//     4) If no extension can be determined, ".img" is used as a fallback.
+//   - When bytes are sniffed from the body, they are prepended back to the reader so the
+//     full image is written to disk. When multiple extensions are returned by
+//     mime.ExtensionsByType the implementation picks the last returned extension.
+//   - File creation is performed via the package-level `createFile` variable which tests
+//     may override to simulate create failures.
 //
-// I/O and cleanup
-//   - The response body and created files are closed; close errors are wrapped/joined with any existing error.
-//   - Errors encountered while parsing the URL, fetching, reading, sniffing, creating directories/files, or copying
-//     data are wrapped with contextual information (e.g. "url", "path", "dir", "file") using the errs package.
+// Resource management and errors:
+//   - The response body and any created file are closed using deferred cleanup; any close
+//     errors are joined into the returned error.
+//   - I/O, network and OS errors are returned (wrapped with contextual information).
+//   - On success, outPath contains the absolute/relative path to the saved image file;
+//     on error, outPath will be empty and err will describe the failure.
 //
-// Return values
-// - outPath: the filesystem path of the saved image (temporary or permanent file).
-// - err: nil on success or a wrapped error describing what went wrong.
+// Notes:
+//   - The function may truncate an existing destination file with the same name.
+//   - The exact behavior of temporary file placement when destDir is empty follows the
+//     semantics of os.CreateTemp.
 func (w *Webinfo) DownloadImage(ctx context.Context, destDir string, temporary bool) (outPath string, err error) {
 	if w == nil {
 		err = errs.Wrap(ErrNullPointer)
@@ -95,7 +109,7 @@ func (w *Webinfo) DownloadImage(ctx context.Context, destDir string, temporary b
 		return
 	}
 	parsed, uerr := fetch.URL(strings.TrimSpace(w.ImageURL))
-	if err != nil {
+	if uerr != nil {
 		err = errs.Wrap(uerr, errs.WithContext("url", w.ImageURL))
 		return
 	}
@@ -108,7 +122,7 @@ func (w *Webinfo) DownloadImage(ctx context.Context, destDir string, temporary b
 	srcExt := path.Ext(srcFname)
 
 	// fetch image
-	resp, ferr := fetch.New(fetch.WithHTTPClient(&http.Client{Timeout: 15 * time.Second})).GetWithContext(
+	resp, ferr := fetch.New(fetch.WithHTTPClient(&http.Client{})).GetWithContext(
 		ctx,
 		parsed,
 		fetch.WithRequestHeaderSet("User-Agent", getUserAgent(w.UserAgent)),
@@ -161,46 +175,39 @@ func (w *Webinfo) DownloadImage(ctx context.Context, destDir string, temporary b
 		ext = ".img"
 	}
 
-	// Create a temporary file
+	var outF *os.File
 	if temporary {
-		tmp, cerr := os.CreateTemp(destDir, "webinfo-image-*"+ext)
+		// Create a temporary file
+		var cerr error
+		outF, cerr = createFile(true, destDir, "webinfo-image-*"+ext)
 		if cerr != nil {
 			err = errs.Wrap(cerr, errs.WithContext("dir", destDir), errs.WithContext("file", "temporary file"))
 			return
 		}
-		defer func() { // ensure temp file closed
-			if cerr := tmp.Close(); cerr != nil && cerr != os.ErrClosed {
-				err = errs.Join(errs.Wrap(cerr, errs.WithContext("path", tmp.Name())), err)
-			}
-		}()
-		if _, cerr := io.Copy(tmp, bodyReader); cerr != nil {
-			err = errs.Wrap(cerr, errs.WithContext("path", tmp.Name()))
+	} else {
+		// Create a permanent file
+		destPath := filepath.Join(destDir, srcFname)
+		if len(srcExt) == 0 {
+			destPath += ext
+		}
+		var cerr error
+		outF, cerr = createFile(false, "", destPath)
+		if cerr != nil {
+			err = errs.Wrap(cerr, errs.WithContext("path", destPath))
 			return
 		}
-		outPath = tmp.Name()
-		return
-	}
-	// Create a permanent file
-	destPath := filepath.Join(destDir, srcFname)
-	if len(srcExt) == 0 {
-		destPath += ext
-	}
-	destPath = filepath.Clean(destPath)
-	f, cerr := os.Create(destPath)
-	if err != nil {
-		err = errs.Wrap(cerr, errs.WithContext("path", destPath))
-		return
 	}
 	defer func() {
-		if cerr := f.Close(); cerr != nil && cerr != os.ErrClosed {
-			err = errs.Join(errs.Wrap(cerr, errs.WithContext("path", f.Name())), err)
+		if cerr := outF.Close(); cerr != nil && cerr != os.ErrClosed {
+			err = errs.Join(errs.Wrap(cerr, errs.WithContext("path", outF.Name())), err)
 		}
 	}()
-	if _, cerr := io.Copy(f, bodyReader); err != nil {
-		err = errs.Wrap(cerr, errs.WithContext("path", f.Name()))
+
+	if _, cerr := io.Copy(outF, bodyReader); cerr != nil {
+		err = errs.Wrap(cerr, errs.WithContext("path", outF.Name()))
 		return
 	}
-	outPath = f.Name()
+	outPath = outF.Name()
 	return
 }
 
@@ -221,10 +228,16 @@ func (w *Webinfo) DownloadImage(ctx context.Context, destDir string, temporary b
 //     width x newH.
 //   - The output format/extension is chosen from the decoded format: jpeg/jpg → .jpg, png → .png,
 //     gif → .gif. Unknown formats fall back to PNG.
-//   - If temporary is true, the thumbnail file is created with os.CreateTemp in destDir using
-//     the pattern "webinfo-thumb-*<ext>" and the temporary file path is returned.
-//   - If temporary is false, the output filename is derived from the original image URL basename
-//     (falling back to "webinfo-image") and named "<base>-thums<ext>" in destDir.
+//   - If `temporary` is true, the thumbnail file is created via the package-level
+//     `createFile` helper (which wraps `os.CreateTemp`) in `destDir` using the
+//     pattern "webinfo-thumb-*<ext>"; the temporary file path is returned.
+//   - If `temporary` is false, the output filename is derived from the original image
+//     URL basename (falling back to "webinfo-image") and named "<base>-thums<ext>" in
+//     `destDir`.
+//   - The encoder used to write the thumbnail is the package-level `outputImage` function
+//     variable; tests may replace this variable to simulate encoder failures. The image
+//     decoding step uses the package-level `decodeImage` wrapper around `image.Decode`,
+//     which tests may also override.
 //   - Files are properly closed with deferred cleanup; any close/remove errors are joined into
 //     the returned error using the errs package.
 //   - All filesystem, download, and image-processing errors are wrapped with contextual
@@ -285,7 +298,7 @@ func (w *Webinfo) DownloadThumbnail(ctx context.Context, destDir string, width i
 		}
 	}()
 
-	img, format, derr := image.Decode(f)
+	img, format, derr := decodeImage(f)
 	if derr != nil {
 		err = errs.Wrap(derr, errs.WithContext("path", origPath))
 		return
@@ -325,16 +338,11 @@ func (w *Webinfo) DownloadThumbnail(ctx context.Context, destDir string, width i
 	if temporary {
 		// temporary: create temp file
 		var cerr error
-		outF, cerr = os.CreateTemp(destDir, "webinfo-thumb-*"+ext)
+		outF, cerr = createFile(true, destDir, "webinfo-thumb-*"+ext)
 		if cerr != nil {
 			err = errs.Wrap(cerr, errs.WithContext("dir", destDir), errs.WithContext("file", "temporary thumbnail"))
 			return
 		}
-		defer func() {
-			if cerr := outF.Close(); cerr != nil && cerr != os.ErrClosed {
-				err = errs.Join(errs.Wrap(cerr, errs.WithContext("path", outF.Name())), err)
-			}
-		}()
 	} else {
 		// not temporary: build filename based on original URL basename
 		base := "webinfo-image"
@@ -345,20 +353,20 @@ func (w *Webinfo) DownloadThumbnail(ctx context.Context, destDir string, width i
 			}
 		}
 		destName := base + "-thums" + ext
-		destPath := filepath.Clean(filepath.Join(destDir, destName))
+		destPath := filepath.Join(destDir, destName)
 
 		var cerr error
-		outF, cerr = os.Create(destPath)
+		outF, cerr = createFile(false, "", destPath)
 		if cerr != nil {
 			err = errs.Wrap(cerr, errs.WithContext("path", destPath))
 			return
 		}
-		defer func() {
-			if cerr := outF.Close(); cerr != nil && cerr != os.ErrClosed {
-				err = errs.Join(errs.Wrap(cerr, errs.WithContext("path", outF.Name())), err)
-			}
-		}()
 	}
+	defer func() {
+		if cerr := outF.Close(); cerr != nil && cerr != os.ErrClosed {
+			err = errs.Join(errs.Wrap(cerr, errs.WithContext("path", outF.Name())), err)
+		}
+	}()
 
 	if oerr := outputImage(outF, thums, format); oerr != nil {
 		err = errs.Wrap(oerr, errs.WithContext("path", outF.Name()))
@@ -369,12 +377,9 @@ func (w *Webinfo) DownloadThumbnail(ctx context.Context, destDir string, width i
 }
 
 // outputImage encodes the provided *image.RGBA src and writes it to dst using
-// the encoder corresponding to the given format string. Supported format values
-// (case-sensitive) are "jpeg" or "jpg", "png", and "gif". JPEG output is written
-// with jpeg.Options{Quality: 90}. If the format value is not recognized, the
-// function falls back to PNG. The function returns any error produced by the
-// chosen encoder.
-func outputImage(dst *os.File, src *image.RGBA, format string) error {
+// the encoder corresponding to the given format string. It is a variable so
+// tests can replace it to simulate encoder failures.
+var outputImage = func(dst *os.File, src *image.RGBA, format string) error {
 	switch format {
 	case "jpeg", "jpg":
 		return jpeg.Encode(dst, src, &jpeg.Options{Quality: 90})
@@ -384,6 +389,23 @@ func outputImage(dst *os.File, src *image.RGBA, format string) error {
 		return gif.Encode(dst, src, nil)
 	}
 	return png.Encode(dst, src) // default to PNG
+}
+
+// createFile is a package-level helper used to create files. It abstracts
+// the creation of temporary and permanent files so tests can replace it to
+// simulate failures during os.Create/os.CreateTemp.
+var createFile = func(temp bool, dir, pathOrPattern string) (*os.File, error) {
+	if temp {
+		return os.CreateTemp(dir, pathOrPattern)
+	}
+	return os.Create(filepath.Clean(pathOrPattern))
+}
+
+// decodeImage is a package-level wrapper around image.Decode so tests can
+// replace it to simulate decoding behaviors (e.g., returning zero-dimension
+// images) without modifying stdlib functions.
+var decodeImage = func(r io.Reader) (image.Image, string, error) {
+	return image.Decode(r)
 }
 
 /* Copyright 2025 Spiegel

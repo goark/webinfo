@@ -2,7 +2,9 @@ package webinfo
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -84,6 +86,66 @@ func TestFetch_DefaultUserAgent(t *testing.T) {
 	}
 	if info.UserAgent != wantUA {
 		t.Errorf("info.UserAgent: want %q, got %q", wantUA, info.UserAgent)
+	}
+}
+
+func TestFetch_CustomUserAgent(t *testing.T) {
+	uaCh := make(chan string, 1)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		uaCh <- r.Header.Get("User-Agent")
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte("<html><head><title>X</title></head><body></body></html>"))
+	})
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	ctx := context.Background()
+	customUA := "MyCustomAgent/1.0"
+	info, err := Fetch(ctx, srv.URL, customUA)
+	if err != nil {
+		t.Fatalf("Fetch returned error: %v", err)
+	}
+	var gotUA string
+	select {
+	case gotUA = <-uaCh:
+	default:
+		t.Fatalf("server did not receive request")
+	}
+	if gotUA != customUA {
+		t.Errorf("User-Agent: want %q, got %q", customUA, gotUA)
+	}
+	if info == nil {
+		t.Fatalf("expected non-nil info")
+	}
+	if info.UserAgent != customUA {
+		t.Errorf("info.UserAgent: want %q, got %q", customUA, info.UserAgent)
+	}
+}
+
+func TestFetch_BodyCloseReturnsError(t *testing.T) {
+	orig := http.DefaultTransport
+	defer func() { http.DefaultTransport = orig }()
+
+	rt := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		b := &failingBody{
+			firstData: []byte("<html><head><title>X</title></head><body></body></html>"),
+			firstErr:  io.ErrUnexpectedEOF,
+			closeErr:  errors.New("simulated close error"),
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Status:     "200 OK",
+			Header:     make(http.Header),
+			Body:       io.NopCloser(b),
+			Request:    req,
+		}, nil
+	})
+	http.DefaultTransport = rt
+
+	ctx := context.Background()
+	_, err := Fetch(ctx, "http://example.invalid/", "")
+	if err == nil {
+		t.Fatalf("expected error when response body Close returns error, got nil")
 	}
 }
 
