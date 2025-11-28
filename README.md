@@ -3,6 +3,7 @@
 [![lint status](https://github.com/goark/webinfo/workflows/lint/badge.svg)](https://github.com/goark/webinfo/actions)
 [![GitHub license](https://img.shields.io/badge/license-Apache%202-blue.svg)](https://raw.githubusercontent.com/goark/webinfo/master/LICENSE)
 [![GitHub release](http://img.shields.io/github/release/goark/webinfo.svg)](https://github.com/goark/webinfo/releases/latest)
+[![Go reference](https://pkg.go.dev/badge/github.com/goark/webinfo.svg)](https://pkg.go.dev/github.com/goark/webinfo)
 
 [`webinfo`][webinfo] is a small Go module that extracts common metadata from web pages and provides utilities
 to download representative images and create thumbnails.
