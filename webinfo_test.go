@@ -17,61 +17,30 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
-func makePNGBytes(w, h int) []byte {
+// makeImageBytes creates a solid-color image and encodes it as PNG or JPEG.
+func makeImageBytes(w, h int, format string, r, g, b uint8) []byte {
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
-	fill := color.RGBA{R: 0x11, G: 0x22, B: 0x33, A: 0xff}
+	fill := color.RGBA{R: r, G: g, B: b, A: 0xff}
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
 			img.SetRGBA(x, y, fill)
 		}
 	}
 	var buf bytes.Buffer
-	_ = png.Encode(&buf, img)
-	return buf.Bytes()
-}
-
-func makeJPEGBytes(w, h int) []byte {
-	img := image.NewRGBA(image.Rect(0, 0, w, h))
-	fill := color.RGBA{R: 0xaa, G: 0xbb, B: 0xcc, A: 0xff}
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			img.SetRGBA(x, y, fill)
-		}
+	switch format {
+	case "jpeg":
+		_ = jpeg.Encode(&buf, img, &jpeg.Options{Quality: 80})
+	case "png":
+		_ = png.Encode(&buf, img)
 	}
-	var buf bytes.Buffer
-	_ = jpeg.Encode(&buf, img, &jpeg.Options{Quality: 80})
-	return buf.Bytes()
-}
-
-func makePNG(w, h int) []byte {
-	img := image.NewRGBA(image.Rect(0, 0, w, h))
-	// fill with solid color
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			img.Set(x, y, color.RGBA{R: 0x11, G: 0x88, B: 0x22, A: 0xff})
-		}
-	}
-	var buf bytes.Buffer
-	_ = png.Encode(&buf, img)
-	return buf.Bytes()
-}
-
-func makeJPEG(w, h int) []byte {
-	img := image.NewRGBA(image.Rect(0, 0, w, h))
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			img.Set(x, y, color.RGBA{R: 0x99, G: 0x44, B: 0x22, A: 0xff})
-		}
-	}
-	var buf bytes.Buffer
-	_ = jpeg.Encode(&buf, img, &jpeg.Options{Quality: 80})
 	return buf.Bytes()
 }
 
 func TestDownloadThumbnail_Temporary(t *testing.T) {
-	pngData := makePNG(200, 100)
+	pngData := makeImageBytes(200, 100, "png", 0x11, 0x88, 0x22)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/img.png" {
 			w.Header().Set("Content-Type", "image/png")
@@ -107,7 +76,7 @@ func TestDownloadThumbnail_Temporary(t *testing.T) {
 }
 
 func TestDownloadThumbnail_Permanent(t *testing.T) {
-	jpgData := makeJPEG(300, 150)
+	jpgData := makeImageBytes(300, 150, "jpeg", 0x11, 0x88, 0x22)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/images/pic.jpg" {
 			w.Header().Set("Content-Type", "image/jpeg")
@@ -129,12 +98,12 @@ func TestDownloadThumbnail_Permanent(t *testing.T) {
 	}
 	defer func() { _ = os.Remove(out) }()
 
-	// ensure file is in destDir and contains -thums
+	// ensure file is in destDir and contains -thumb
 	if filepath.Dir(out) != filepath.Clean(destDir) {
 		t.Fatalf("thumbnail path dir: want %q, got %q", destDir, filepath.Dir(out))
 	}
-	if !strings.Contains(filepath.Base(out), "-thums") {
-		t.Fatalf("thumbnail filename should contain -thums: %q", out)
+	if !strings.Contains(filepath.Base(out), "-thumb") {
+		t.Fatalf("thumbnail filename should contain -thumb: %q", out)
 	}
 
 	f, ferr := os.Open(filepath.Clean(out))
@@ -318,7 +287,7 @@ func TestDownloadImage_CopyReadFails(t *testing.T) {
 			StatusCode: 200,
 			Status:     "200 OK",
 			Header:     make(http.Header),
-			Body:       io.NopCloser(b),
+			Body:       b,
 			Request:    req,
 		}, nil
 	})
@@ -330,30 +299,6 @@ func TestDownloadImage_CopyReadFails(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error when io.Copy encounters read error, got nil")
 	}
-}
-
-func TestDownloadImage_CloseErrorJoined(t *testing.T) {
-	orig := http.DefaultTransport
-	defer func() { http.DefaultTransport = orig }()
-
-	rt := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
-		// provide some data for sniffing and normal EOF for copy; Close will return an error
-		b := &failingBody{
-			firstData: []byte("abcd"),
-			firstErr:  io.ErrUnexpectedEOF,
-			closeErr:  errors.New("simulated close error"),
-		}
-		return &http.Response{
-			StatusCode: 200,
-			Status:     "200 OK",
-			Header:     make(http.Header),
-			Body:       io.NopCloser(b),
-			Request:    req,
-		}, nil
-	})
-	http.DefaultTransport = rt
-
-	// This case is covered by TestFetch_BodyCloseReturnsError (Fetch joins close errors).
 }
 
 // helper types used by tests
@@ -467,7 +412,7 @@ func TestOutputImage_ClosedDstReturnsError(t *testing.T) {
 }
 
 func TestDownloadImage_ContentTypeWithCharset(t *testing.T) {
-	pngBytes := makePNGBytes(16, 8)
+	pngBytes := makeImageBytes(16, 8, "png", 0x11, 0x88, 0x22)
 	handler := func(wr http.ResponseWriter, r *http.Request) {
 		wr.Header().Set("Content-Type", "image/png; charset=utf-8")
 		_, _ = wr.Write(pngBytes)
@@ -498,7 +443,7 @@ func TestDownloadImage_BadURL(t *testing.T) {
 
 func TestDownloadImage_AppendExtWhenNoSrcExt(t *testing.T) {
 	// serve PNG at /images/pic (no extension in URL)
-	pngBytes := makePNGBytes(12, 6)
+	pngBytes := makeImageBytes(12, 6, "png", 0x11, 0x88, 0x22)
 	handler := func(wr http.ResponseWriter, r *http.Request) {
 		wr.Header().Set("Content-Type", "image/png")
 		_, _ = wr.Write(pngBytes)
@@ -527,7 +472,7 @@ func TestDownloadImage_AppendExtWhenNoSrcExt(t *testing.T) {
 }
 
 func TestDownloadImage_TemporaryWithoutDestDirUsesOSTemp(t *testing.T) {
-	pngBytes := makePNGBytes(6, 3)
+	pngBytes := makeImageBytes(6, 3, "png", 0x11, 0x88, 0x22)
 	handler := func(wr http.ResponseWriter, r *http.Request) {
 		wr.Header().Set("Content-Type", "image/png")
 		_, _ = wr.Write(pngBytes)
@@ -619,7 +564,7 @@ func TestDownloadImage_MultipleExtensionsByType(t *testing.T) {
 	_ = mime.AddExtensionType(".ex1my", "image/x-mytest")
 	_ = mime.AddExtensionType(".ex2my", "image/x-mytest")
 
-	pngBytes := makePNGBytes(10, 5)
+	pngBytes := makeImageBytes(10, 5, "png", 0x11, 0x88, 0x22)
 	handler := func(wr http.ResponseWriter, r *http.Request) {
 		// omit filename extension; rely on Content-Type header
 		wr.Header().Set("Content-Type", "image/x-mytest")
@@ -664,7 +609,7 @@ func TestOutputImage_WriteFails(t *testing.T) {
 }
 
 func TestDownloadImage_CreateFileFails(t *testing.T) {
-	pngBytes := makePNGBytes(6, 6)
+	pngBytes := makeImageBytes(6, 6, "png", 0x11, 0x88, 0x22)
 	handler := func(wr http.ResponseWriter, r *http.Request) {
 		wr.Header().Set("Content-Type", "image/png")
 		_, _ = wr.Write(pngBytes)
@@ -691,7 +636,7 @@ func TestDownloadImage_CreateFileFails(t *testing.T) {
 }
 
 func TestDownloadImage_TemporaryCreateFails(t *testing.T) {
-	pngBytes := makePNGBytes(8, 8)
+	pngBytes := makeImageBytes(8, 8, "png", 0x11, 0x88, 0x22)
 	handler := func(wr http.ResponseWriter, r *http.Request) {
 		wr.Header().Set("Content-Type", "image/png")
 		_, _ = wr.Write(pngBytes)
@@ -717,7 +662,7 @@ func TestDownloadImage_TemporaryCreateFails(t *testing.T) {
 }
 
 func TestDownloadThumbnail_TemporaryCreateFails(t *testing.T) {
-	pngData := makePNG(80, 40)
+	pngData := makeImageBytes(80, 40, "png", 0x11, 0x88, 0x22)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
 		_, _ = w.Write(pngData)
@@ -742,8 +687,9 @@ func TestDownloadThumbnail_TemporaryCreateFails(t *testing.T) {
 	}
 }
 
-func TestDownloadThumbnail_ThumbnailCreateTempFails(t *testing.T) {
-	pngData := makePNG(80, 40)
+func TestDownloadThumbnail_OutputCreateFails(t *testing.T) {
+	// failure only for thumbnail output file, not for the intermediate original image download
+	pngData := makeImageBytes(80, 40, "png", 0x11, 0x88, 0x22)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
 		_, _ = w.Write(pngData)
@@ -777,9 +723,31 @@ func TestDownloadThumbnail_NilReceiver(t *testing.T) {
 	}
 }
 
+func TestDownloadImage_HTTPClientTimeout(t *testing.T) {
+	// server delays longer than client timeout
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(pngSig)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(handler))
+	defer srv.Close()
+
+	// override newHTTPClient to return a short timeout
+	orig := newHTTPClient
+	defer func() { newHTTPClient = orig }()
+	newHTTPClient = func() *http.Client { return &http.Client{Timeout: 50 * time.Millisecond} }
+
+	w := &Webinfo{ImageURL: srv.URL + "/img.png"}
+	_, err := w.DownloadImage(context.Background(), t.TempDir(), true)
+	if err == nil {
+		t.Fatalf("expected timeout error, got nil")
+	}
+}
+
 func TestDownloadThumbnail_TemporaryPNG_DefaultWidth(t *testing.T) {
 	// original image 200x100 -> expected thumbnail width 150 (default), height 75
-	pngBytes := makePNGBytes(200, 100)
+	pngBytes := makeImageBytes(200, 100, "png", 0x11, 0x88, 0x22)
 	handler := func(wr http.ResponseWriter, r *http.Request) {
 		wr.Header().Set("Content-Type", "image/png")
 		_, _ = wr.Write(pngBytes)
@@ -819,7 +787,7 @@ func TestDownloadThumbnail_TemporaryPNG_DefaultWidth(t *testing.T) {
 
 func TestDownloadThumbnail_NonTemporaryJPEG_FilenameDerived(t *testing.T) {
 	// original 100x100 -> thumbnail 50x50
-	jpgBytes := makeJPEGBytes(100, 100)
+	jpgBytes := makeImageBytes(100, 100, "jpeg", 0x11, 0x88, 0x22)
 	handler := func(wr http.ResponseWriter, r *http.Request) {
 		wr.Header().Set("Content-Type", "image/jpeg")
 		_, _ = wr.Write(jpgBytes)
@@ -833,7 +801,7 @@ func TestDownloadThumbnail_NonTemporaryJPEG_FilenameDerived(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DownloadThumbnail failed: %v", err)
 	}
-	want := filepath.Join(dest, "pic-thums.jpg")
+	want := filepath.Join(dest, "pic-thumb.jpg")
 	if out != want {
 		t.Fatalf("unexpected path: got %q want %q", out, want)
 	}
@@ -870,7 +838,7 @@ func TestDownloadThumbnail_MkdirAllFails(t *testing.T) {
 }
 
 func TestDownloadThumbnail_BaseFallbackWhenURLHasNoBasename(t *testing.T) {
-	pngData := makePNG(120, 60)
+	pngData := makeImageBytes(120, 60, "png", 0x11, 0x88, 0x22)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
 		_, _ = w.Write(pngData)
@@ -886,7 +854,7 @@ func TestDownloadThumbnail_BaseFallbackWhenURLHasNoBasename(t *testing.T) {
 		t.Fatalf("DownloadThumbnail failed: %v", err)
 	}
 	defer func() { _ = os.Remove(out) }()
-	want := filepath.Join(dest, "webinfo-image-thums.png")
+	want := filepath.Join(dest, "webinfo-image-thumb.png")
 	if out != want {
 		t.Fatalf("unexpected thumbnail path: got %q want %q", out, want)
 	}
@@ -903,7 +871,7 @@ func TestDownloadImage_NoImageURL(t *testing.T) {
 func TestDownloadThumbnail_ZeroOrigDimensions(t *testing.T) {
 	// server returns a small PNG but we override decodeImage to return a
 	// zero-width image to exercise the origW==0 || origH==0 error path.
-	pngData := makePNGBytes(4, 4)
+	pngData := makeImageBytes(4, 4, "png", 0x11, 0x88, 0x22)
 	handler := func(wr http.ResponseWriter, r *http.Request) {
 		wr.Header().Set("Content-Type", "image/png")
 		_, _ = wr.Write(pngData)
@@ -927,7 +895,7 @@ func TestDownloadThumbnail_ZeroOrigDimensions(t *testing.T) {
 
 func TestDownloadThumbnail_HeightClampedToOne(t *testing.T) {
 	// original image very wide but 1px tall -> newH may round to 0 and should be clamped to 1
-	pngData := makePNGBytes(1000, 1)
+	pngData := makeImageBytes(1000, 1, "png", 0x11, 0x88, 0x22)
 	handler := func(wr http.ResponseWriter, r *http.Request) {
 		wr.Header().Set("Content-Type", "image/png")
 		_, _ = wr.Write(pngData)
@@ -957,7 +925,7 @@ func TestDownloadThumbnail_HeightClampedToOne(t *testing.T) {
 }
 
 func TestDownloadThumbnail_CreateFileFailsWhenDestFileReadOnly(t *testing.T) {
-	pngData := makePNG(80, 40)
+	pngData := makeImageBytes(80, 40, "png", 0x11, 0x88, 0x22)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/images/pic.png" {
 			w.Header().Set("Content-Type", "image/png")
@@ -989,7 +957,7 @@ func TestDownloadThumbnail_CreateFileFailsWhenDestFileReadOnly(t *testing.T) {
 
 func TestDownloadThumbnail_SmallDimensions(t *testing.T) {
 	// small original image -> request very small width
-	pngData := makePNG(2, 1)
+	pngData := makeImageBytes(2, 1, "png", 0x11, 0x88, 0x22)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
 		_, _ = w.Write(pngData)
@@ -1024,7 +992,7 @@ func TestDownloadThumbnail_SmallDimensions(t *testing.T) {
 
 func TestDownloadThumbnail_OutputImageFails(t *testing.T) {
 	// serve a PNG and then override outputImage to simulate encoder failure
-	pngData := makePNG(40, 20)
+	pngData := makeImageBytes(40, 20, "png", 0x11, 0x88, 0x22)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
 		_, _ = w.Write(pngData)
@@ -1076,7 +1044,7 @@ func TestDownloadThumbnail_DecodeFails(t *testing.T) {
 
 func TestDownloadThumbnail_TemporaryDefaultDest(t *testing.T) {
 	// ensure when destDir is empty and temporary=true, thumbnail is created in OS temp
-	pngData := makePNG(40, 20)
+	pngData := makeImageBytes(40, 20, "png", 0x11, 0x88, 0x22)
 	handler := http.HandlerFunc(func(wr http.ResponseWriter, r *http.Request) {
 		wr.Header().Set("Content-Type", "image/png")
 		_, _ = wr.Write(pngData)

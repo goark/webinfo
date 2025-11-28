@@ -15,6 +15,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/goark/errs"
 	"github.com/goark/fetch"
@@ -122,7 +123,7 @@ func (w *Webinfo) DownloadImage(ctx context.Context, destDir string, temporary b
 	srcExt := path.Ext(srcFname)
 
 	// fetch image
-	resp, ferr := fetch.New(fetch.WithHTTPClient(&http.Client{})).GetWithContext(
+	resp, ferr := fetch.New(fetch.WithHTTPClient(newHTTPClient())).GetWithContext(
 		ctx,
 		parsed,
 		fetch.WithRequestHeaderSet("User-Agent", getUserAgent(w.UserAgent)),
@@ -232,7 +233,7 @@ func (w *Webinfo) DownloadImage(ctx context.Context, destDir string, temporary b
 //     `createFile` helper (which wraps `os.CreateTemp`) in `destDir` using the
 //     pattern "webinfo-thumb-*<ext>"; the temporary file path is returned.
 //   - If `temporary` is false, the output filename is derived from the original image
-//     URL basename (falling back to "webinfo-image") and named "<base>-thums<ext>" in
+//     URL basename (falling back to "webinfo-image") and named "<base>-thumb<ext>" in
 //     `destDir`.
 //   - The encoder used to write the thumbnail is the package-level `outputImage` function
 //     variable; tests may replace this variable to simulate encoder failures. The image
@@ -317,8 +318,8 @@ func (w *Webinfo) DownloadThumbnail(ctx context.Context, destDir string, width i
 		newH = 1
 	}
 
-	thums := image.NewRGBA(image.Rect(0, 0, width, newH))
-	draw.CatmullRom.Scale(thums, thums.Bounds(), img, bounds, draw.Over, nil) // scale by Catmull-Rom
+	thumb := image.NewRGBA(image.Rect(0, 0, width, newH))
+	draw.CatmullRom.Scale(thumb, thumb.Bounds(), img, bounds, draw.Over, nil) // scale by Catmull-Rom
 
 	// determine extension/format for output
 	var ext string
@@ -368,7 +369,7 @@ func (w *Webinfo) DownloadThumbnail(ctx context.Context, destDir string, width i
 		}
 	}()
 
-	if oerr := outputImage(outF, thums, format); oerr != nil {
+	if oerr := outputImage(outF, thumb, format); oerr != nil {
 		err = errs.Wrap(oerr, errs.WithContext("path", outF.Name()))
 		return
 	}
@@ -406,6 +407,13 @@ var createFile = func(temp bool, dir, pathOrPattern string) (*os.File, error) {
 // images) without modifying stdlib functions.
 var decodeImage = func(r io.Reader) (image.Image, string, error) {
 	return image.Decode(r)
+}
+
+// newHTTPClient returns the http.Client used for web requests. It is a package-level
+// variable so tests can override it. By default it sets a 30-second timeout for
+// the whole request (connect+read+write).
+var newHTTPClient = func() *http.Client {
+	return &http.Client{Timeout: 30 * time.Second}
 }
 
 /* Copyright 2025 Spiegel

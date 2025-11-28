@@ -87,6 +87,9 @@ Note on defaults and test hooks:
 These hooks are intended for tests and let callers reproduce rare I/O or encoding failures without changing
 production behavior.
 
+- **HTTP client timeout**: `DownloadImage` uses an HTTP client with a default 30-second `Timeout` for the whole
+  request; tests can override this by replacing the `newHTTPClient` package variable.
+
 ## Test examples
 
 Below are short examples showing how to override the package-level hooks from a test to simulate failures.
@@ -142,6 +145,21 @@ Notes:
 - Ensure your test imports include `errors`, `io`, `image`, and `strings` as needed.
 - Restore the original variables with `defer` to avoid cross-test interference.
 - These examples are intentionally minimal — adapt them to your test fixtures (httptest servers, temp dirs, etc.).
+
+4) Simulate HTTP client timeout by overriding `newHTTPClient`:
+
+```go
+origClient := newHTTPClient
+defer func() { newHTTPClient = origClient }()
+newHTTPClient = func() *http.Client {
+  // short timeout for test
+  return &http.Client{Timeout: 50 * time.Millisecond}
+}
+
+// then call DownloadImage which uses newHTTPClient()
+_, err := info.DownloadImage(ctx, t.TempDir(), true)
+// assert err != nil (expect timeout)
+```
 
 ### Error handling
 
