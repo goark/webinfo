@@ -352,7 +352,7 @@ func (w *Webinfo) DownloadThumbnail(ctx context.Context, destDir string, width i
 				base = strings.TrimSuffix(bn, path.Ext(bn))
 			}
 		}
-		destName := base + "-thums" + ext
+		destName := base + "-thumb" + ext
 		destPath := filepath.Join(destDir, destName)
 
 		var cerr error
