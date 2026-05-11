@@ -46,7 +46,3 @@ tasks:
     generates:
       - ./dependency.png
 
-  install:
-    desc: Install govulncheck tool.
-    cmds:
-      - go install golang.org/x/vuln/cmd/govulncheck@latest
