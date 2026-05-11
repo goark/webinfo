@@ -1,85 +1,83 @@
-Purpose
--------
-This file gives concise, actionable guidance for AI coding agents working on the `webinfo` Go module.
+# Copilot Instructions for `goark/webinfo`
 
-What this project does
-----------------------
-Extracts metadata (title, description, canonical, image, etc.) from web pages and provides utilities
-to fetch and save representative images and create thumbnails.
+## Project purpose
 
-Quick entry points
-------------------
-- **Primary package**: `webinfo` — key files:
-  - `fetch.go` (core `Fetch` function and encoding handling)
-  - `webinfo.go` (`Webinfo` type, `DownloadImage`, and `DownloadThumbnail`)
-  - `errs.go` (error sentinel values)
-  - `fetch_test.go` (behavioral tests and examples)
-- **Go module**: `go 1.25` (see `go.mod`).
+`webinfo` extracts metadata from web pages and provides helpers for
+image download and thumbnail generation.
 
-Developer workflows
--------------------
-- Run full CI/test workflow using the Taskfile (recommended if `task` is installed):
-  - `task test` — runs `go mod verify`, `go test -shuffle on ./...`, `govulncheck`, and `golangci-lint-v2` as configured in `Taskfile.yml`.
-- Quick test: `go test ./...` (useful during fast iteration).
-- Prepare module: `go mod tidy -v -go=1.25` (mirrors `prepare` in `Taskfile.yml`).
+## Design principles
 
-Project-specific conventions and patterns
-----------------------------------------
-- Error handling: uses `github.com/goark/errs`. Prefer `errs.Wrap(err, errs.WithContext("key", val))` for context-rich errors and `errs.Join` when combining close errors in `defer`.
-- HTTP fetching: uses `github.com/goark/fetch`. Typical pattern:
-  - Parse URL with `fetch.URL(...)`.
-  - Use `fetch.New(...).GetWithContext(ctx, parsed, fetch.WithRequestHeaderSet("User-Agent", ua))`.
-- Default User-Agent: `getUserAgent("")` returns a dummy UA string. Functions accept a `userAgent` param but fall back to this default.
-- Encoding: `Fetch` peeks the first 1024 bytes and uses `charset.DetermineEncoding` and `encoding.GetEncoding(name)` to decode response bodies before HTML parsing — preserve this approach when touching parsing logic.
-- HTML parsing: `goquery` is used to select head elements and meta tags. Extraction precedence is explicit in `fetch.go` (title → `twitter:title`/`og:title`, description → `twitter:description`/`og:description`, image → `twitter:image`/`og:image`). Follow this precedence in code changes or tests.
+- Keep public APIs small and explicit.
+- Preserve metadata extraction precedence and deterministic behavior.
+- Keep context-based fetch operations as the default path.
+- Preserve compatibility of exported symbols when possible.
 
-Image download and thumbnail notes
----------------------------------
-- `DownloadImage` (in `webinfo.go`) downloads `w.ImageURL` and saves it to disk. It determines the output file extension using this order:
-  1) extension from the URL path,
-  2) extensions inferred from the response `Content-Type` header,
-  3) sniffing the first up to 512 bytes via `http.DetectContentType`,
-  4) fallback to `.img` if none found.
-  When sniffing, the read bytes are prepended back into the response body with `io.MultiReader` so the full image is written.
-- `DownloadThumbnail` (added to `webinfo.go`) downloads the original image (via `DownloadImage`), resizes it to a requested width (preserving aspect ratio) and writes a thumbnail. Implementation notes:
-  - The code currently uses a local nearest-neighbor scaler (no external `x/image/draw` dependency) to avoid adding module requirements.
-  - The method accepts `width` (default 150 when <= 0), `destDir`, and `temporary` flags. When `destDir` is empty the method forces creation of a temporary file.
-  - When `temporary` is false, the thumbnail filename is derived from the original image basename with `-thumb` appended before the extension.
+## Error handling
 
-I/O and cleanup
-----------------
-- Response bodies and files are closed; close errors are wrapped/joined with any existing error.
-- Errors encountered while parsing the URL, fetching, reading, sniffing, creating directories/files, or copying data are wrapped with contextual information (e.g. `"url"`, `"path"`, `"dir"`, `"file"`) using the `errs` package.
+- Use `github.com/goark/errs` for internal error handling.
+- Prefer `errs.Wrap`, `errs.Join`, and `errs.WithContext`.
+- Keep `errors.Is` compatibility for callers.
+- Keep sentinel errors stable (`ErrInvalidURL`, `ErrNoImageURL`, `ErrNullPointer`).
+- Include useful context keys such as `url`, `path`, and `dir`.
 
-Tests and examples
-------------------
-- Tests use `net/http/httptest` for deterministic responses (encoding tests use `golang.org/x/text/encoding/japanese`). Inspect `fetch_test.go` for examples of:
-  - Redirect handling and validation of `Location`.
-  - Encoding tests for Shift_JIS and ISO-2022-JP.
-  - Verifying `User-Agent` header usage.
-- Example usage patterns to follow when adding code or tests:
-  - Fetch: `info, err := Fetch(ctx, "https://example.com", "")` — empty UA uses the default.
-  - Download image: `outPath, err := w.DownloadImage(ctx, "images", true)`
-  - Download thumbnail: `thumbPath, err := w.DownloadThumbnail(ctx, "thumbnails", 150, false)`
+## Fetch and parsing behavior
 
-External dependencies & integration points
-----------------------------------------
-- Key dependencies in `go.mod`: `github.com/goark/fetch`, `github.com/goark/errs`, `github.com/PuerkitoBio/goquery`, `golang.org/x/text` (encodings).
-- The repository intentionally avoids adding `golang.org/x/image/draw` as a dependency; if you need higher-quality scaling consider adding it and updating `go.mod` and tests.
-- The `Taskfile.yml` runs additional tools: `govulncheck`, `golangci-lint-v2`, and (optionally) `nancy` via `depm` — keep CI tool invocations in sync when adding dependencies.
+- Use `github.com/goark/fetch` for HTTP operations.
+- Keep the default User-Agent fallback behavior.
+- Preserve encoding detection flow in `Fetch` (1024-byte peek + charset detection).
+- Keep extraction precedence unchanged:
+  - title: `title` -> `twitter:title` -> `og:title`
+  - description: `meta[name=description]` -> `twitter:description` -> `og:description`
+  - image: `twitter:image` -> `og:image`
 
-When modifying public APIs
--------------------------
-- Maintain existing error-wrapping conventions (`errs.Wrap`, `errs.WithContext`).
-- Preserve encoding detection behavior and the 1024-byte peek in `Fetch` unless a clear, tested performance reason exists.
-- Preserve `DownloadImage`'s extension-detection order and the behavior of `temporary` vs permanent files. When adding `DownloadThumbnail` behavior or changing file-naming semantics, update tests accordingly.
+## Image and thumbnail behavior
 
-Where to look next (high-value files)
--------------------------------------
-- `fetch.go` — how pages are fetched, decoded and parsed.
-- `webinfo.go` — `Webinfo` type, `DownloadImage`, and `DownloadThumbnail` implementations.
-- `fetch_test.go` — canonical tests and examples you should mirror for new behaviors.
-- `errs.go` and `go.mod` — error constants and dependency hints.
-- `Taskfile.yml` — canonical developer/test/lint workflow.
+- Keep `DownloadImage` extension detection order:
+  1) URL path extension
+  2) `Content-Type` based extension
+  3) content sniffing (`http.DetectContentType`)
+  4) fallback `.img`
+- Keep the sniffed bytes prepended back to the body reader.
+- Keep temporary/permanent file behavior stable.
+- Keep thumbnail default width behavior (`width <= 0` -> `150`).
 
-If anything above is unclear or you want small patches, test templates, or a CI-safe refactor suggestion, tell me which area to expand and I will iterate.
+## Coding style
+
+- Write idiomatic Go with straightforward control flow.
+- Avoid unnecessary dependencies.
+- Keep comments concise and in English.
+
+## Testing and validation
+
+- Add or update tests for behavior changes.
+- Prefer local validation with Taskfile targets:
+  - `task test`
+  - `task govulncheck`
+
+## Documentation
+
+- Keep `README.md` aligned with public API behavior.
+- Keep examples concise and runnable.
+
+## Release process
+
+- Create release tags from `main`.
+- Use semantic versioning tags in `vMAJOR.MINOR.PATCH` format.
+- Ensure repository is clean and synced before tagging.
+
+Release steps:
+
+1. Ensure `main` is up to date.
+2. Create annotated tag:
+  - `git tag -a vX.Y.Z -m "Release vX.Y.Z"`
+3. Push tag:
+  - `git push origin vX.Y.Z`
+4. Create GitHub release with autogenerated notes:
+  - `gh release create vX.Y.Z --generate-notes`
+
+Verification steps:
+
+- Check tag exists:
+  - `git tag -l "vX.Y.Z"`
+- Check release exists:
+  - `gh release view vX.Y.Z`

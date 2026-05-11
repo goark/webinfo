@@ -277,7 +277,7 @@ func TestFetch_ISO2022JP_Encoding(t *testing.T) {
 	}
 }
 
-/* Copyright 2025 Spiegel
+/* Copyright 2025-2026 Spiegel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
