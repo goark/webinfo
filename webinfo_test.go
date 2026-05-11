@@ -187,7 +187,7 @@ func TestDownloadImage_TemporaryWhenNoFilenameAndContentType(t *testing.T) {
 		t.Fatalf("tmp file not created in dest: %s", out)
 	}
 	ext := filepath.Ext(out)
-	if ext != ".jpg" && ext != ".jpeg" && ext != ".img" {
+	if ext != ".jpg" && ext != ".jpeg" && ext != ".pjpeg" && ext != ".img" {
 		t.Fatalf("unexpected extension %q", ext)
 	}
 	got := readFile(t, out)
