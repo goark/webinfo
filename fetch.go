@@ -15,39 +15,18 @@ import (
 	"golang.org/x/net/html/charset"
 )
 
-// Fetch retrieves metadata from the web page at urlStr and returns it as a *Webinfo.
+// Fetch retrieves metadata from a web page and returns it as Webinfo.
 //
-// Behavior:
-//   - Parses urlStr and performs an HTTP GET using the provided context (ctx).
-//   - If userAgent is empty, a default dummy User-Agent string is used.
-//   - Uses an HTTP client and sets the User-Agent request header.
-//   - Reads up to the first 1024 bytes of the response to detect the page character
-//     encoding via charset.DetermineEncoding (also considers the response Content-Type).
-//     If an encoding is detected or inferred by name, the response body is decoded
-//     accordingly before HTML parsing.
+// It fetches the page with the given context and User-Agent (or a default one when
+// empty), peeks up to 1024 bytes to determine encoding, then parses the head
+// section with goquery.
 //
-// Parsing and extracted fields:
-// - Parses the document head with goquery and extracts:
-//   - Title: from <title>, then overridden by meta[property="twitter:title"] or meta[property="og:title"] if present.
-//   - Description: from meta[name="description"], then overridden by meta[property="twitter:description"] or meta[property="og:description"].
-//   - ImageURL: from meta[property="twitter:image"] or meta[property="og:image"].
-//   - Canonical: from link[rel="canonical"].
+// Extraction precedence is kept explicit:
+// title: title -> twitter:title -> og:title
+// description: meta[name=description] -> twitter:description -> og:description
+// image: twitter:image -> og:image
 //
-// - The returned Webinfo contains at least:
-//   - URL: the original urlStr (string form).
-//   - Location: the final request URL (after redirects) from the response.
-//   - UserAgent: the User-Agent actually used.
-//
-// Error handling and resource cleanup:
-// - Network, URL parsing, encoding detection, and HTML parsing errors are wrapped with contextual information (including the URL).
-// - The response body is closed in a deferred function; any close error is joined with the returned error.
-// - On error, Fetch returns a nil *Webinfo and a non-nil error.
-//
-// Notes and guarantees:
-// - The first 1024 bytes are peeked (without advancing the reader) to determine encoding.
-// - DetermineEncoding's boolean return value is ignored (some encodings like Shift_JIS may be reported inconsistently); the detected encoding or a named encoding (via encoding.GetEncoding) is preferred.
-// - The function honors context cancellation for the HTTP request.
-// - Caller should assume that a non-nil *Webinfo is returned only on success; otherwise, info is nil.
+// Returned errors are wrapped with context. Response close errors are joined.
 func Fetch(ctx context.Context, urlStr, userAgent string) (info *Webinfo, err error) {
 	// check arguments
 	parsed, uerr := fetch.URL(strings.TrimSpace(urlStr))
@@ -158,10 +137,8 @@ func Fetch(ctx context.Context, urlStr, userAgent string) (info *Webinfo, err er
 	return
 }
 
-// getUserAgent returns a user-agent string to use for HTTP requests.
-// It trims whitespace from the provided ua parameter; if the trimmed value is empty,
-// it returns a default (dummy) User-Agent string ("Mozilla/5.0 (Windows NT 6.1; rv:11.0) Gecko/20100101 Firefox/11.0").
-// Otherwise, it returns the supplied ua unchanged.
+// getUserAgent returns ua if non-empty after trimming; otherwise it returns
+// the package default User-Agent string.
 func getUserAgent(ua string) string {
 	if len(strings.TrimSpace(ua)) == 0 {
 		return "Mozilla/5.0 (Windows NT 6.1; rv:11.0) Gecko/20100101 Firefox/11.0" //dummy user-agent string
@@ -169,7 +146,7 @@ func getUserAgent(ua string) string {
 	return ua
 }
 
-/* Copyright 2025 Spiegel
+/* Copyright 2025-2026 Spiegel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.

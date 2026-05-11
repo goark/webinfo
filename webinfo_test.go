@@ -187,7 +187,7 @@ func TestDownloadImage_TemporaryWhenNoFilenameAndContentType(t *testing.T) {
 		t.Fatalf("tmp file not created in dest: %s", out)
 	}
 	ext := filepath.Ext(out)
-	if ext != ".jpg" && ext != ".jpeg" && ext != ".img" {
+	if ext != ".jpg" && ext != ".jpeg" && ext != ".pjpeg" && ext != ".img" {
 		t.Fatalf("unexpected extension %q", ext)
 	}
 	got := readFile(t, out)
@@ -1068,7 +1068,7 @@ func TestDownloadThumbnail_TemporaryDefaultDest(t *testing.T) {
 	}
 }
 
-/* Copyright 2025 Spiegel
+/* Copyright 2025-2026 Spiegel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
