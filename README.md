@@ -76,11 +76,18 @@ thumbPath, err := info.DownloadThumbnail(ctx, "thumbnails", 150, false)
 if err != nil {
   return err
 }
+
+imgBytes, err := info.ImageBytes(ctx)
+if err != nil {
+  return err
+}
+fmt.Println(len(imgBytes))
 ```
 
 ### Public API
 
 - `Fetch(ctx, rawURL, userAgent)` extracts metadata from a page.
+- `(*Webinfo).ImageBytes(ctx)` downloads `Webinfo.ImageURL` into memory.
 - `(*Webinfo).DownloadImage(ctx, destDir, temporary)` downloads `Webinfo.ImageURL`.
 - `(*Webinfo).DownloadThumbnail(ctx, destDir, width, temporary)` creates a resized thumbnail.
 
@@ -96,6 +103,7 @@ if err != nil {
   3. sniff first 512 bytes (`http.DetectContentType`)
   4. fallback `.img`
 - `DownloadThumbnail` uses width `150` when `width <= 0`.
+- `ImageBytes` reads the full response body into memory; very large images can increase memory usage.
 
 ## Error handling
 
