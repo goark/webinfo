@@ -34,6 +34,51 @@ type Webinfo struct {
 	UserAgent   string `json:"user_agent,omitempty"`  // User-Agent used to fetch the page
 }
 
+// ImageBytes downloads w.ImageURL and returns its contents in memory.
+//
+// Risk: this method reads the entire response body into memory, so very large
+// images can increase memory usage.
+//
+// Returned errors are wrapped with context and include response close failures.
+func (w *Webinfo) ImageBytes(ctx context.Context) (data []byte, err error) {
+	if w == nil {
+		err = errs.Wrap(ErrNullPointer)
+		return
+	}
+	if w.ImageURL == "" {
+		err = errs.Wrap(ErrNoImageURL)
+		return
+	}
+
+	parsed, uerr := fetch.URL(strings.TrimSpace(w.ImageURL))
+	if uerr != nil {
+		err = errs.Wrap(uerr, errs.WithContext("url", w.ImageURL))
+		return
+	}
+
+	resp, ferr := fetch.New(fetch.WithHTTPClient(newHTTPClient())).GetWithContext(
+		ctx,
+		parsed,
+		fetch.WithRequestHeaderSet("User-Agent", getUserAgent(w.UserAgent)),
+	)
+	if ferr != nil {
+		err = errs.Wrap(ferr, errs.WithContext("url", parsed.String()))
+		return
+	}
+	defer func() {
+		if cerr := resp.Close(); cerr != nil && cerr != os.ErrClosed {
+			err = errs.Join(cerr, err)
+		}
+	}()
+
+	data, err = io.ReadAll(resp.Body())
+	if err != nil {
+		err = errs.Wrap(err, errs.WithContext("url", parsed.String()))
+		return
+	}
+	return
+}
+
 // DownloadImage downloads w.ImageURL and writes it under destDir.
 //
 // If temporary is true, or if the URL path has no filename, a temporary file is created.

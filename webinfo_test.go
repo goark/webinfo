@@ -142,6 +142,41 @@ func TestDownloadImage_NilReceiver(t *testing.T) {
 	}
 }
 
+func TestImageBytes_NilReceiver(t *testing.T) {
+	var w *Webinfo
+	_, err := w.ImageBytes(context.Background())
+	if err == nil {
+		t.Fatalf("expected error for nil receiver")
+	}
+}
+
+func TestImageBytes_EmptyURL(t *testing.T) {
+	w := &Webinfo{}
+	_, err := w.ImageBytes(context.Background())
+	if err == nil {
+		t.Fatalf("expected error for empty image URL")
+	}
+}
+
+func TestImageBytes_Success(t *testing.T) {
+	body := makeImageBytes(10, 10, "png", 0xaa, 0xbb, 0xcc)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(body)
+	})
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	w := &Webinfo{ImageURL: srv.URL + "/img.png"}
+	got, err := w.ImageBytes(context.Background())
+	if err != nil {
+		t.Fatalf("ImageBytes failed: %v", err)
+	}
+	if !bytes.Equal(got, body) {
+		t.Fatalf("ImageBytes content mismatch")
+	}
+}
+
 func TestDownloadImage_SaveWithFilename(t *testing.T) {
 	// serve a PNG at /images/pic.png
 	handler := func(wr http.ResponseWriter, r *http.Request) {
