@@ -17,6 +17,8 @@ import (
 	"strings"
 	"time"
 
+	_ "golang.org/x/image/webp" // register webp decoder
+
 	"github.com/goark/errs"
 	"github.com/goark/fetch"
 	"golang.org/x/image/draw"
@@ -222,6 +224,7 @@ func (w *Webinfo) DownloadImage(ctx context.Context, destDir string, temporary b
 // The source image is downloaded to a temporary file first and removed on return.
 // Output uses a temporary name when temporary is true; otherwise it uses
 // "<base>-thumb<ext>" derived from the original image URL.
+// Decoded WebP input is currently written as JPEG output (fallback behavior).
 //
 // Returned errors are wrapped with context and include cleanup failures.
 func (w *Webinfo) DownloadThumbnail(ctx context.Context, destDir string, width int, temporary bool) (outPath string, err error) {
@@ -298,6 +301,9 @@ func (w *Webinfo) DownloadThumbnail(ctx context.Context, destDir string, width i
 		ext = ".png"
 	case "gif":
 		ext = ".gif"
+	case "webp": // webp is not supported by the standard library, but we can still use .jpg as a fallback
+		ext = ".jpg"
+		format = "jpeg"
 	default:
 		ext = ".png"
 		format = "png"
