@@ -1077,6 +1077,47 @@ func TestDownloadThumbnail_DecodeFails(t *testing.T) {
 	}
 }
 
+func TestDownloadThumbnail_WebPFallbackToJPEG(t *testing.T) {
+	// Serve any image bytes; decodeImage is overridden to force webp format branch.
+	pngData := makeImageBytes(20, 10, "png", 0x22, 0x44, 0x66)
+	handler := http.HandlerFunc(func(wr http.ResponseWriter, r *http.Request) {
+		wr.Header().Set("Content-Type", "image/png")
+		_, _ = wr.Write(pngData)
+	})
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	// Force decodeImage to return "webp" so DownloadThumbnail uses JPEG fallback.
+	origDecode := decodeImage
+	decodeImage = func(r io.Reader) (image.Image, string, error) {
+		return image.NewRGBA(image.Rect(0, 0, 20, 10)), "webp", nil
+	}
+	defer func() { decodeImage = origDecode }()
+
+	var gotFormat string
+	origOutput := outputImage
+	outputImage = func(dst *os.File, src *image.RGBA, format string) error {
+		gotFormat = format
+		return nil
+	}
+	defer func() { outputImage = origOutput }()
+
+	dest := t.TempDir()
+	w := &Webinfo{ImageURL: srv.URL + "/img.webp"}
+	out, err := w.DownloadThumbnail(context.Background(), dest, 12, false)
+	if err != nil {
+		t.Fatalf("DownloadThumbnail failed: %v", err)
+	}
+	defer func() { _ = os.Remove(out) }()
+
+	if filepath.Ext(out) != ".jpg" {
+		t.Fatalf("unexpected extension: got %q want %q", filepath.Ext(out), ".jpg")
+	}
+	if gotFormat != "jpeg" {
+		t.Fatalf("unexpected output format: got %q want %q", gotFormat, "jpeg")
+	}
+}
+
 func TestDownloadThumbnail_TemporaryDefaultDest(t *testing.T) {
 	// ensure when destDir is empty and temporary=true, thumbnail is created in OS temp
 	pngData := makeImageBytes(40, 20, "png", 0x11, 0x88, 0x22)
