@@ -77,7 +77,7 @@ func TestFetch_DefaultUserAgent(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatalf("server did not receive request")
 	}
-	wantUA := "Mozilla/5.0 (Windows NT 6.1; rv:11.0) Gecko/20100101 Firefox/11.0"
+	wantUA := DefaultUserAgent()
 	if gotUA != wantUA {
 		t.Errorf("User-Agent: want %q, got %q", wantUA, gotUA)
 	}
