@@ -86,7 +86,8 @@ fmt.Println(len(imgBytes))
 
 ### Public API
 
-- `Fetch(ctx, rawURL, userAgent)` extracts metadata from a page.
+- `DefaultUserAgent()` returns the package default User-Agent string.
+- `Fetch(ctx, rawURL, userAgent)` extracts metadata from a page. When `userAgent` is empty, the default value is used.
 - `(*Webinfo).ImageBytes(ctx)` downloads `Webinfo.ImageURL` into memory.
 - `(*Webinfo).DownloadImage(ctx, destDir, temporary)` downloads `Webinfo.ImageURL`.
 - `(*Webinfo).DownloadThumbnail(ctx, destDir, width, temporary)` creates a resized thumbnail.

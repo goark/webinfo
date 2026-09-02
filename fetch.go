@@ -137,11 +137,16 @@ func Fetch(ctx context.Context, urlStr, userAgent string) (info *Webinfo, err er
 	return
 }
 
+// DefaultUserAgent returns the default User-Agent string.
+func DefaultUserAgent() string {
+	return "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) Gecko/20100101 Firefox/148.0" //dummy user-agent string (ref: https://note.com/kzstock/n/nae18de160dca)
+}
+
 // getUserAgent returns ua if non-empty after trimming; otherwise it returns
 // the package default User-Agent string.
 func getUserAgent(ua string) string {
 	if len(strings.TrimSpace(ua)) == 0 {
-		return "Mozilla/5.0 (Windows NT 6.1; rv:11.0) Gecko/20100101 Firefox/11.0" //dummy user-agent string
+		return DefaultUserAgent()
 	}
 	return ua
 }
