@@ -67,17 +67,19 @@ fmt.Println(info.Title, info.Description)
 ### Download image and thumbnail
 
 ```go
-imgPath, err := info.DownloadImage(ctx, "images", true)
+flagHTTP11 := false
+
+imgPath, err := info.DownloadImage(ctx, flagHTTP11, "images", true)
 if err != nil {
   return err
 }
 
-thumbPath, err := info.DownloadThumbnail(ctx, "thumbnails", 150, false)
+thumbPath, err := info.DownloadThumbnail(ctx, flagHTTP11, "thumbnails", 150, false)
 if err != nil {
   return err
 }
 
-imgBytes, err := info.ImageBytes(ctx)
+imgBytes, err := info.ImageBytes(ctx, flagHTTP11)
 if err != nil {
   return err
 }
@@ -88,9 +90,9 @@ fmt.Println(len(imgBytes))
 
 - `DefaultUserAgent()` returns the package default User-Agent string.
 - `Fetch(ctx, rawURL, userAgent)` extracts metadata from a page. When `userAgent` is empty, the default value is used.
-- `(*Webinfo).ImageBytes(ctx)` downloads `Webinfo.ImageURL` into memory.
-- `(*Webinfo).DownloadImage(ctx, destDir, temporary)` downloads `Webinfo.ImageURL`.
-- `(*Webinfo).DownloadThumbnail(ctx, destDir, width, temporary)` creates a resized thumbnail.
+- `(*Webinfo).ImageBytes(ctx, flagHTTP11)` downloads `Webinfo.ImageURL` into memory. The `flagHTTP11` parameter controls whether to use HTTP/1.1 only.
+- `(*Webinfo).DownloadImage(ctx, flagHTTP11, destDir, temporary)` downloads `Webinfo.ImageURL`. The `flagHTTP11` parameter controls whether to use HTTP/1.1 only. The `destDir` parameter specifies the destination directory, and `temporary` flag indicates if the file should be created as a temporary file.
+- `(*Webinfo).DownloadThumbnail(ctx, flagHTTP11, destDir, width, temporary)` creates a resized thumbnail. The `flagHTTP11` parameter controls whether to use HTTP/1.1 only. The `destDir` parameter specifies the destination directory, `width` sets the thumbnail width, and `temporary` flag indicates if the file should be created as a temporary file.
 
 ## Behavior notes
 
