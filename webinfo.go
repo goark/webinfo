@@ -42,7 +42,7 @@ type Webinfo struct {
 // images can increase memory usage.
 //
 // Returned errors are wrapped with context and include response close failures.
-func (w *Webinfo) ImageBytes(ctx context.Context) (data []byte, err error) {
+func (w *Webinfo) ImageBytes(ctx context.Context, flagHTTP11 bool) (data []byte, err error) {
 	if w == nil {
 		err = errs.Wrap(ErrNullPointer)
 		return
@@ -58,7 +58,7 @@ func (w *Webinfo) ImageBytes(ctx context.Context) (data []byte, err error) {
 		return
 	}
 
-	resp, ferr := fetch.New(fetch.WithHTTPClient(newHTTPClient())).GetWithContext(
+	resp, ferr := fetch.New(httpClientOpt(flagHTTP11)).GetWithContext(
 		ctx,
 		parsed,
 		fetch.WithRequestHeaderSet("User-Agent", getUserAgent(w.UserAgent)),
@@ -93,7 +93,7 @@ func (w *Webinfo) ImageBytes(ctx context.Context) (data []byte, err error) {
 //  4. fallback ".img"
 //
 // Returned errors are wrapped with context and include cleanup failures.
-func (w *Webinfo) DownloadImage(ctx context.Context, destDir string, temporary bool) (outPath string, err error) {
+func (w *Webinfo) DownloadImage(ctx context.Context, flagHTTP11 bool, destDir string, temporary bool) (outPath string, err error) {
 	if w == nil {
 		err = errs.Wrap(ErrNullPointer)
 		return
@@ -127,7 +127,7 @@ func (w *Webinfo) DownloadImage(ctx context.Context, destDir string, temporary b
 	srcExt := path.Ext(srcFname)
 
 	// fetch image
-	resp, ferr := fetch.New(fetch.WithHTTPClient(newHTTPClient())).GetWithContext(
+	resp, ferr := fetch.New(httpClientOpt(flagHTTP11)).GetWithContext(
 		ctx,
 		parsed,
 		fetch.WithRequestHeaderSet("User-Agent", getUserAgent(w.UserAgent)),
@@ -227,7 +227,7 @@ func (w *Webinfo) DownloadImage(ctx context.Context, destDir string, temporary b
 // Decoded WebP input is currently written as JPEG output (fallback behavior).
 //
 // Returned errors are wrapped with context and include cleanup failures.
-func (w *Webinfo) DownloadThumbnail(ctx context.Context, destDir string, width int, temporary bool) (outPath string, err error) {
+func (w *Webinfo) DownloadThumbnail(ctx context.Context, flagHTTP11 bool, destDir string, width int, temporary bool) (outPath string, err error) {
 	if w == nil {
 		err = errs.Wrap(ErrNullPointer)
 		return
@@ -247,7 +247,7 @@ func (w *Webinfo) DownloadThumbnail(ctx context.Context, destDir string, width i
 	}
 
 	// Download original image to a temporary file (always temp to avoid name collisions)
-	origPath, derr := w.DownloadImage(ctx, "", true)
+	origPath, derr := w.DownloadImage(ctx, flagHTTP11, "", true)
 	if derr != nil {
 		err = errs.Wrap(derr, errs.WithContext("url", w.ImageURL))
 		return
@@ -380,10 +380,13 @@ var decodeImage = func(r io.Reader) (image.Image, string, error) {
 	return image.Decode(r)
 }
 
-// newHTTPClient returns the default HTTP client used by downloads.
+// httpClientOpt returns the fetch.ClientOpts configured with the default HTTP client.
 // Tests may replace this variable.
-var newHTTPClient = func() *http.Client {
-	return &http.Client{Timeout: 30 * time.Second}
+var httpClientOpt = func(flagHTTP11 bool) fetch.ClientOpts {
+	if flagHTTP11 {
+		return fetch.WithHTTP11Client()
+	}
+	return fetch.WithHTTPClient(&http.Client{Timeout: 30 * time.Second})
 }
 
 /* Copyright 2025-2026 Spiegel
