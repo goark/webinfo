@@ -15,7 +15,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	info, err := webinfo.Fetch(ctx, "https://example.com", "")
+	info, err := webinfo.Fetch(ctx, "https://example.com", "", false)
 	if err != nil {
 		log.Fatalf("Fetch failed: %v", err)
 	}

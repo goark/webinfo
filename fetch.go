@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/goark/errs"
@@ -27,7 +28,7 @@ import (
 // image: twitter:image -> og:image
 //
 // Returned errors are wrapped with context. Response close errors are joined.
-func Fetch(ctx context.Context, urlStr, userAgent string) (info *Webinfo, err error) {
+func Fetch(ctx context.Context, urlStr, userAgent string, forceHTTP11 bool) (info *Webinfo, err error) {
 	// check arguments
 	parsed, uerr := fetch.URL(strings.TrimSpace(urlStr))
 	if uerr != nil {
@@ -38,7 +39,7 @@ func Fetch(ctx context.Context, urlStr, userAgent string) (info *Webinfo, err er
 	userAgent = getUserAgent(userAgent)
 
 	// fetch web page
-	resp, ferr := fetch.New(fetch.WithHTTPClient(&http.Client{})).GetWithContext(
+	resp, ferr := fetch.New(httpClientOpt(forceHTTP11)).GetWithContext(
 		ctx,
 		parsed,
 		fetch.WithRequestHeaderSet("User-Agent", userAgent),
@@ -75,9 +76,10 @@ func Fetch(ctx context.Context, urlStr, userAgent string) (info *Webinfo, err er
 
 	// parse HTML metadata
 	info = &Webinfo{
-		URL:       parsed.String(),
-		Location:  resp.Request().URL.String(),
-		UserAgent: userAgent,
+		URL:         parsed.String(),
+		Location:    resp.Request().URL.String(),
+		UserAgent:   userAgent,
+		ForceHTTP11: forceHTTP11,
 	}
 	var doc *goquery.Document
 	doc, err = goquery.NewDocumentFromReader(r)
@@ -139,7 +141,7 @@ func Fetch(ctx context.Context, urlStr, userAgent string) (info *Webinfo, err er
 
 // DefaultUserAgent returns the default User-Agent string.
 func DefaultUserAgent() string {
-	return "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) Gecko/20100101 Firefox/148.0" //dummy user-agent string (ref: https://note.com/kzstock/n/nae18de160dca)
+	return "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:159.0) Gecko/20100101 Firefox/159.0" //dummy user-agent string (ref: https://note.com/kzstock/n/nae18de160dca)
 }
 
 // getUserAgent returns ua if non-empty after trimming; otherwise it returns
@@ -149,6 +151,15 @@ func getUserAgent(ua string) string {
 		return DefaultUserAgent()
 	}
 	return ua
+}
+
+// httpClientOpt returns the fetch.ClientOpts configured with the default HTTP client.
+// Tests may replace this variable.
+var httpClientOpt = func(flagHTTP11 bool) fetch.ClientOpts {
+	if flagHTTP11 {
+		return fetch.WithHTTP11Client()
+	}
+	return fetch.WithHTTPClient(&http.Client{Timeout: 30 * time.Second})
 }
 
 /* Copyright 2025-2026 Spiegel

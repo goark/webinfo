@@ -35,7 +35,7 @@ func TestFetch_ParseMeta(t *testing.T) {
 	defer srv.Close()
 
 	ctx := context.Background()
-	info, err := Fetch(ctx, srv.URL, "")
+	info, err := Fetch(ctx, srv.URL, "", false)
 	if err != nil {
 		t.Fatalf("Fetch returned error: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestFetch_DefaultUserAgent(t *testing.T) {
 	defer srv.Close()
 
 	ctx := context.Background()
-	info, err := Fetch(ctx, srv.URL, "")
+	info, err := Fetch(ctx, srv.URL, "", false)
 	if err != nil {
 		t.Fatalf("Fetch returned error: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestFetch_CustomUserAgent(t *testing.T) {
 
 	ctx := context.Background()
 	customUA := "MyCustomAgent/1.0"
-	info, err := Fetch(ctx, srv.URL, customUA)
+	info, err := Fetch(ctx, srv.URL, customUA, false)
 	if err != nil {
 		t.Fatalf("Fetch returned error: %v", err)
 	}
@@ -143,7 +143,7 @@ func TestFetch_BodyCloseReturnsError(t *testing.T) {
 	http.DefaultTransport = rt
 
 	ctx := context.Background()
-	_, err := Fetch(ctx, "http://example.invalid/", "")
+	_, err := Fetch(ctx, "http://example.invalid/", "", false)
 	if err == nil {
 		t.Fatalf("expected error when response body Close returns error, got nil")
 	}
@@ -151,7 +151,7 @@ func TestFetch_BodyCloseReturnsError(t *testing.T) {
 
 func TestFetch_BadURL(t *testing.T) {
 	ctx := context.Background()
-	_, err := Fetch(ctx, "://bad-url", "")
+	_, err := Fetch(ctx, "://bad-url", "", false)
 	if err == nil {
 		t.Fatalf("expected error for bad URL, got nil")
 	}
@@ -159,7 +159,7 @@ func TestFetch_BadURL(t *testing.T) {
 
 func TestFetch_NonexistentHost(t *testing.T) {
 	ctx := context.Background()
-	_, err := Fetch(ctx, "https://example.invalid/", "")
+	_, err := Fetch(ctx, "https://example.invalid/", "", false)
 	if err == nil {
 		t.Fatalf("expected error for nonexistent host, got nil")
 	}
@@ -184,7 +184,7 @@ func TestFetch_Redirect(t *testing.T) {
 
 	ctx := context.Background()
 	startURL := redirectSrv.URL + "/start"
-	info, err := Fetch(ctx, startURL, "")
+	info, err := Fetch(ctx, startURL, "", false)
 	if err != nil {
 		t.Fatalf("Fetch returned error: %v", err)
 	}
@@ -229,7 +229,7 @@ func TestFetch_ShiftJIS_Encoding(t *testing.T) {
 	defer srv.Close()
 
 	ctx := context.Background()
-	info, err := Fetch(ctx, srv.URL, "")
+	info, err := Fetch(ctx, srv.URL, "", false)
 	if err != nil {
 		t.Fatalf("Fetch returned error: %v", err)
 	}
@@ -262,7 +262,7 @@ func TestFetch_ISO2022JP_Encoding(t *testing.T) {
 	defer srv.Close()
 
 	ctx := context.Background()
-	info, err := Fetch(ctx, srv.URL, "")
+	info, err := Fetch(ctx, srv.URL, "", false)
 	if err != nil {
 		t.Fatalf("Fetch returned error: %v", err)
 	}
