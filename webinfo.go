@@ -15,7 +15,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"time"
 
 	_ "golang.org/x/image/webp" // register webp decoder
 
@@ -27,13 +26,14 @@ import (
 // Webinfo stores metadata extracted from a web page and values used for
 // follow-up image download operations.
 type Webinfo struct {
-	URL         string `json:"url,omitempty"`         // Original page URL
-	Location    string `json:"location,omitempty"`    // Location
-	Canonical   string `json:"canonical,omitempty"`   // Canonical URL
-	Title       string `json:"title,omitempty"`       // Page title
-	Description string `json:"description,omitempty"` // Meta description
-	ImageURL    string `json:"image_url,omitempty"`   // Representative image URL
-	UserAgent   string `json:"user_agent,omitempty"`  // User-Agent used to fetch the page
+	URL         string `json:"url,omitempty"`          // Original page URL
+	Location    string `json:"location,omitempty"`     // Location
+	Canonical   string `json:"canonical,omitempty"`    // Canonical URL
+	Title       string `json:"title,omitempty"`        // Page title
+	Description string `json:"description,omitempty"`  // Meta description
+	ImageURL    string `json:"image_url,omitempty"`    // Representative image URL
+	UserAgent   string `json:"user_agent,omitempty"`   // User-Agent used to fetch the page
+	ForceHTTP11 bool   `json:"force_http11,omitempty"` // Force HTTP/1.1 for requests
 }
 
 // ImageBytes downloads w.ImageURL and returns its contents in memory.
@@ -42,7 +42,7 @@ type Webinfo struct {
 // images can increase memory usage.
 //
 // Returned errors are wrapped with context and include response close failures.
-func (w *Webinfo) ImageBytes(ctx context.Context, flagHTTP11 bool) (data []byte, err error) {
+func (w *Webinfo) ImageBytes(ctx context.Context) (data []byte, err error) {
 	if w == nil {
 		err = errs.Wrap(ErrNullPointer)
 		return
@@ -58,7 +58,7 @@ func (w *Webinfo) ImageBytes(ctx context.Context, flagHTTP11 bool) (data []byte,
 		return
 	}
 
-	resp, ferr := fetch.New(httpClientOpt(flagHTTP11)).GetWithContext(
+	resp, ferr := fetch.New(httpClientOpt(w.ForceHTTP11)).GetWithContext(
 		ctx,
 		parsed,
 		fetch.WithRequestHeaderSet("User-Agent", getUserAgent(w.UserAgent)),
@@ -93,7 +93,7 @@ func (w *Webinfo) ImageBytes(ctx context.Context, flagHTTP11 bool) (data []byte,
 //  4. fallback ".img"
 //
 // Returned errors are wrapped with context and include cleanup failures.
-func (w *Webinfo) DownloadImage(ctx context.Context, flagHTTP11 bool, destDir string, temporary bool) (outPath string, err error) {
+func (w *Webinfo) DownloadImage(ctx context.Context, destDir string, temporary bool) (outPath string, err error) {
 	if w == nil {
 		err = errs.Wrap(ErrNullPointer)
 		return
@@ -127,7 +127,7 @@ func (w *Webinfo) DownloadImage(ctx context.Context, flagHTTP11 bool, destDir st
 	srcExt := path.Ext(srcFname)
 
 	// fetch image
-	resp, ferr := fetch.New(httpClientOpt(flagHTTP11)).GetWithContext(
+	resp, ferr := fetch.New(httpClientOpt(w.ForceHTTP11)).GetWithContext(
 		ctx,
 		parsed,
 		fetch.WithRequestHeaderSet("User-Agent", getUserAgent(w.UserAgent)),
@@ -227,7 +227,7 @@ func (w *Webinfo) DownloadImage(ctx context.Context, flagHTTP11 bool, destDir st
 // Decoded WebP input is currently written as JPEG output (fallback behavior).
 //
 // Returned errors are wrapped with context and include cleanup failures.
-func (w *Webinfo) DownloadThumbnail(ctx context.Context, flagHTTP11 bool, destDir string, width int, temporary bool) (outPath string, err error) {
+func (w *Webinfo) DownloadThumbnail(ctx context.Context, destDir string, width int, temporary bool) (outPath string, err error) {
 	if w == nil {
 		err = errs.Wrap(ErrNullPointer)
 		return
@@ -247,7 +247,7 @@ func (w *Webinfo) DownloadThumbnail(ctx context.Context, flagHTTP11 bool, destDi
 	}
 
 	// Download original image to a temporary file (always temp to avoid name collisions)
-	origPath, derr := w.DownloadImage(ctx, flagHTTP11, "", true)
+	origPath, derr := w.DownloadImage(ctx, "", true)
 	if derr != nil {
 		err = errs.Wrap(derr, errs.WithContext("url", w.ImageURL))
 		return
@@ -378,15 +378,6 @@ var createFile = func(temp bool, dir, pathOrPattern string) (*os.File, error) {
 // Tests may replace this variable.
 var decodeImage = func(r io.Reader) (image.Image, string, error) {
 	return image.Decode(r)
-}
-
-// httpClientOpt returns the fetch.ClientOpts configured with the default HTTP client.
-// Tests may replace this variable.
-var httpClientOpt = func(flagHTTP11 bool) fetch.ClientOpts {
-	if flagHTTP11 {
-		return fetch.WithHTTP11Client()
-	}
-	return fetch.WithHTTPClient(&http.Client{Timeout: 30 * time.Second})
 }
 
 /* Copyright 2025-2026 Spiegel

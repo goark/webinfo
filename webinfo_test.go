@@ -54,10 +54,10 @@ func TestDownloadThumbnail_Temporary(t *testing.T) {
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
 
-	info := &Webinfo{ImageURL: srv.URL + "/img.png"}
+	info := &Webinfo{ImageURL: srv.URL + "/img.png", ForceHTTP11: true}
 	ctx := context.Background()
 
-	out, err := info.DownloadThumbnail(ctx, false, "", 100, true)
+	out, err := info.DownloadThumbnail(ctx, "", 100, true)
 	if err != nil {
 		t.Fatalf("DownloadThumbnail returned error: %v", err)
 	}
@@ -91,10 +91,10 @@ func TestDownloadThumbnail_Permanent(t *testing.T) {
 	defer srv.Close()
 
 	destDir := t.TempDir()
-	info := &Webinfo{ImageURL: srv.URL + "/images/pic.jpg"}
+	info := &Webinfo{ImageURL: srv.URL + "/images/pic.jpg", ForceHTTP11: false}
 	ctx := context.Background()
 
-	out, err := info.DownloadThumbnail(ctx, false, destDir, 50, false)
+	out, err := info.DownloadThumbnail(ctx, destDir, 50, false)
 	if err != nil {
 		t.Fatalf("DownloadThumbnail returned error: %v", err)
 	}
@@ -138,7 +138,7 @@ func readFile(t *testing.T, path string) []byte {
 
 func TestDownloadImage_NilReceiver(t *testing.T) {
 	var w *Webinfo
-	_, err := w.DownloadImage(context.Background(), false, "", true)
+	_, err := w.DownloadImage(context.Background(), "", true)
 	if err == nil {
 		t.Fatalf("expected error for nil receiver")
 	}
@@ -146,7 +146,7 @@ func TestDownloadImage_NilReceiver(t *testing.T) {
 
 func TestImageBytes_NilReceiver(t *testing.T) {
 	var w *Webinfo
-	_, err := w.ImageBytes(context.Background(), false)
+	_, err := w.ImageBytes(context.Background())
 	if err == nil {
 		t.Fatalf("expected error for nil receiver")
 	}
@@ -154,7 +154,7 @@ func TestImageBytes_NilReceiver(t *testing.T) {
 
 func TestImageBytes_EmptyURL(t *testing.T) {
 	w := &Webinfo{}
-	_, err := w.ImageBytes(context.Background(), false)
+	_, err := w.ImageBytes(context.Background())
 	if err == nil {
 		t.Fatalf("expected error for empty image URL")
 	}
@@ -169,8 +169,8 @@ func TestImageBytes_Success(t *testing.T) {
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
 
-	w := &Webinfo{ImageURL: srv.URL + "/img.png"}
-	got, err := w.ImageBytes(context.Background(), false)
+	w := &Webinfo{ImageURL: srv.URL + "/img.png", ForceHTTP11: false}
+	got, err := w.ImageBytes(context.Background())
 	if err != nil {
 		t.Fatalf("ImageBytes failed: %v", err)
 	}
@@ -189,8 +189,8 @@ func TestDownloadImage_SaveWithFilename(t *testing.T) {
 	defer srv.Close()
 
 	dest := t.TempDir()
-	w := &Webinfo{ImageURL: srv.URL + "/images/pic.png", UserAgent: ""}
-	out, err := w.DownloadImage(context.Background(), false, dest, false)
+	w := &Webinfo{ImageURL: srv.URL + "/images/pic.png", UserAgent: "", ForceHTTP11: false}
+	out, err := w.DownloadImage(context.Background(), dest, false)
 	if err != nil {
 		t.Fatalf("DownloadImage failed: %v", err)
 	}
@@ -215,8 +215,8 @@ func TestDownloadImage_TemporaryWhenNoFilenameAndContentType(t *testing.T) {
 
 	dest := t.TempDir()
 	// URL ending with "/" causes srcFname to be "/" and thus temporary forced true
-	w := &Webinfo{ImageURL: srv.URL + "/", UserAgent: ""}
-	out, err := w.DownloadImage(context.Background(), false, dest, false) // pass false; function should switch to temporary
+	w := &Webinfo{ImageURL: srv.URL + "/", UserAgent: "", ForceHTTP11: false}
+	out, err := w.DownloadImage(context.Background(), dest, false) // pass false; function should switch to temporary
 	if err != nil {
 		t.Fatalf("DownloadImage failed: %v", err)
 	}
@@ -245,8 +245,8 @@ func TestDownloadImage_SniffingDeterminesExtension(t *testing.T) {
 	// nested dest dir to ensure MkdirAll behavior
 	base := t.TempDir()
 	dest := filepath.Join(base, "nested", "sub")
-	w := &Webinfo{ImageURL: srv.URL + "/", UserAgent: ""}
-	out, err := w.DownloadImage(context.Background(), false, dest, false) // should become temporary and use sniffed ext
+	w := &Webinfo{ImageURL: srv.URL + "/", UserAgent: "", ForceHTTP11: false}
+	out, err := w.DownloadImage(context.Background(), dest, false) // should become temporary and use sniffed ext
 	if err != nil {
 		t.Fatalf("DownloadImage failed: %v", err)
 	}
@@ -274,8 +274,8 @@ func TestDownloadImage_MkdirAllFails(t *testing.T) {
 	// dest path includes the blocker as a path component; MkdirAll should fail
 	dest := filepath.Join(blocker, "nested")
 
-	w := &Webinfo{ImageURL: "http://example.invalid/img.png"}
-	_, err := w.DownloadImage(context.Background(), false, dest, true)
+	w := &Webinfo{ImageURL: "http://example.invalid/img.png", ForceHTTP11: false}
+	_, err := w.DownloadImage(context.Background(), dest, true)
 	if err == nil {
 		t.Fatalf("expected error when MkdirAll cannot create directories, got nil")
 	}
@@ -302,8 +302,8 @@ func TestDownloadImage_ReadFullReturnsError(t *testing.T) {
 	http.DefaultTransport = rt
 
 	dest := t.TempDir()
-	w := &Webinfo{ImageURL: "http://example.invalid/"}
-	_, err := w.DownloadImage(context.Background(), false, dest, false)
+	w := &Webinfo{ImageURL: "http://example.invalid/", ForceHTTP11: false}
+	_, err := w.DownloadImage(context.Background(), dest, false)
 	if err == nil {
 		t.Fatalf("expected error when ReadFull returns non-EOF error, got nil")
 	}
@@ -331,8 +331,8 @@ func TestDownloadImage_CopyReadFails(t *testing.T) {
 	http.DefaultTransport = rt
 
 	dest := t.TempDir()
-	w := &Webinfo{ImageURL: "http://example.invalid/"}
-	_, err := w.DownloadImage(context.Background(), false, dest, false)
+	w := &Webinfo{ImageURL: "http://example.invalid/", ForceHTTP11: false}
+	_, err := w.DownloadImage(context.Background(), dest, false)
 	if err == nil {
 		t.Fatalf("expected error when io.Copy encounters read error, got nil")
 	}
@@ -458,8 +458,8 @@ func TestDownloadImage_ContentTypeWithCharset(t *testing.T) {
 	defer srv.Close()
 
 	dest := t.TempDir()
-	w := &Webinfo{ImageURL: srv.URL + "/"}
-	out, err := w.DownloadImage(context.Background(), false, dest, false)
+	w := &Webinfo{ImageURL: srv.URL + "/", ForceHTTP11: false}
+	out, err := w.DownloadImage(context.Background(), dest, false)
 	if err != nil {
 		t.Fatalf("DownloadImage failed: %v", err)
 	}
@@ -471,8 +471,8 @@ func TestDownloadImage_ContentTypeWithCharset(t *testing.T) {
 }
 
 func TestDownloadImage_BadURL(t *testing.T) {
-	w := &Webinfo{ImageURL: "://bad-url"}
-	_, err := w.DownloadImage(context.Background(), false, "", true)
+	w := &Webinfo{ImageURL: "://bad-url", ForceHTTP11: false}
+	_, err := w.DownloadImage(context.Background(), "", true)
 	if err == nil {
 		t.Fatalf("expected error for bad URL, got nil")
 	}
@@ -489,8 +489,8 @@ func TestDownloadImage_AppendExtWhenNoSrcExt(t *testing.T) {
 	defer srv.Close()
 
 	dest := t.TempDir()
-	w := &Webinfo{ImageURL: srv.URL + "/images/pic"}
-	out, err := w.DownloadImage(context.Background(), false, dest, false)
+	w := &Webinfo{ImageURL: srv.URL + "/images/pic", ForceHTTP11: false}
+	out, err := w.DownloadImage(context.Background(), dest, false)
 	if err != nil {
 		t.Fatalf("DownloadImage failed: %v", err)
 	}
@@ -517,8 +517,8 @@ func TestDownloadImage_TemporaryWithoutDestDirUsesOSTemp(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(handler))
 	defer srv.Close()
 
-	w := &Webinfo{ImageURL: srv.URL + "/img.png"}
-	out, err := w.DownloadImage(context.Background(), false, "", true)
+	w := &Webinfo{ImageURL: srv.URL + "/img.png", ForceHTTP11: false}
+	out, err := w.DownloadImage(context.Background(), "", true)
 	if err != nil {
 		t.Fatalf("DownloadImage failed: %v", err)
 	}
@@ -564,10 +564,10 @@ func TestDownloadImage_GIF_SaveAndThumbnail(t *testing.T) {
 	defer srv.Close()
 
 	dest := t.TempDir()
-	w := &Webinfo{ImageURL: srv.URL + "/images/pic.gif"}
+	w := &Webinfo{ImageURL: srv.URL + "/images/pic.gif", ForceHTTP11: false}
 
 	// Test DownloadImage saves with .gif
-	out, err := w.DownloadImage(context.Background(), false, dest, false)
+	out, err := w.DownloadImage(context.Background(), dest, false)
 	if err != nil {
 		t.Fatalf("DownloadImage failed: %v", err)
 	}
@@ -577,7 +577,7 @@ func TestDownloadImage_GIF_SaveAndThumbnail(t *testing.T) {
 	}
 
 	// Test DownloadThumbnail produces a GIF thumbnail when format is gif
-	thumb, err := w.DownloadThumbnail(context.Background(), false, dest, 20, false)
+	thumb, err := w.DownloadThumbnail(context.Background(), dest, 20, false)
 	if err != nil {
 		t.Fatalf("DownloadThumbnail failed: %v", err)
 	}
@@ -611,8 +611,8 @@ func TestDownloadImage_MultipleExtensionsByType(t *testing.T) {
 	defer srv.Close()
 
 	base := t.TempDir()
-	w := &Webinfo{ImageURL: srv.URL + "/"}
-	out, err := w.DownloadImage(context.Background(), false, base, false)
+	w := &Webinfo{ImageURL: srv.URL + "/", ForceHTTP11: false}
+	out, err := w.DownloadImage(context.Background(), base, false)
 	if err != nil {
 		t.Fatalf("DownloadImage failed: %v", err)
 	}
@@ -665,8 +665,8 @@ func TestDownloadImage_CreateFileFails(t *testing.T) {
 		return orig(temp, dir, pathOrPattern)
 	}
 
-	w := &Webinfo{ImageURL: srv.URL + "/images/pic.png"}
-	_, err := w.DownloadImage(context.Background(), false, dest, false)
+	w := &Webinfo{ImageURL: srv.URL + "/images/pic.png", ForceHTTP11: false}
+	_, err := w.DownloadImage(context.Background(), dest, false)
 	if err == nil {
 		t.Fatalf("expected error when permanent file creation fails, got nil")
 	}
@@ -691,8 +691,8 @@ func TestDownloadImage_TemporaryCreateFails(t *testing.T) {
 		return orig(temp, dir, pathOrPattern)
 	}
 
-	w := &Webinfo{ImageURL: srv.URL + "/img.png"}
-	_, err := w.DownloadImage(context.Background(), false, t.TempDir(), true)
+	w := &Webinfo{ImageURL: srv.URL + "/img.png", ForceHTTP11: false}
+	_, err := w.DownloadImage(context.Background(), t.TempDir(), true)
 	if err == nil {
 		t.Fatalf("expected error when temporary file creation fails, got nil")
 	}
@@ -717,8 +717,8 @@ func TestDownloadThumbnail_TemporaryCreateFails(t *testing.T) {
 		return orig(temp, dir, pathOrPattern)
 	}
 
-	w := &Webinfo{ImageURL: srv.URL + "/images/pic.png"}
-	_, err := w.DownloadThumbnail(context.Background(), false, t.TempDir(), 50, true)
+	w := &Webinfo{ImageURL: srv.URL + "/images/pic.png", ForceHTTP11: false}
+	_, err := w.DownloadThumbnail(context.Background(), t.TempDir(), 50, true)
 	if err == nil {
 		t.Fatalf("expected error when temporary thumbnail creation fails, got nil")
 	}
@@ -745,8 +745,8 @@ func TestDownloadThumbnail_OutputCreateFails(t *testing.T) {
 	}
 
 	// Use a dest dir for the thumbnail so createFile is called for the thumb
-	w := &Webinfo{ImageURL: srv.URL + "/images/pic.png"}
-	_, err := w.DownloadThumbnail(context.Background(), false, t.TempDir(), 50, true)
+	w := &Webinfo{ImageURL: srv.URL + "/images/pic.png", ForceHTTP11: false}
+	_, err := w.DownloadThumbnail(context.Background(), t.TempDir(), 50, true)
 	if err == nil {
 		t.Fatalf("expected error when thumbnail temporary creation fails, got nil")
 	}
@@ -754,7 +754,7 @@ func TestDownloadThumbnail_OutputCreateFails(t *testing.T) {
 
 func TestDownloadThumbnail_NilReceiver(t *testing.T) {
 	var w *Webinfo
-	_, err := w.DownloadThumbnail(context.Background(), false, "", 100, true)
+	_, err := w.DownloadThumbnail(context.Background(), "", 100, true)
 	if err == nil {
 		t.Fatalf("expected error for nil receiver")
 	}
@@ -777,8 +777,8 @@ func TestDownloadImage_HTTPClientTimeout(t *testing.T) {
 		return fetch.WithHTTPClient(&http.Client{Timeout: 50 * time.Millisecond})
 	}
 
-	w := &Webinfo{ImageURL: srv.URL + "/img.png"}
-	_, err := w.DownloadImage(context.Background(), false, t.TempDir(), true)
+	w := &Webinfo{ImageURL: srv.URL + "/img.png", ForceHTTP11: false}
+	_, err := w.DownloadImage(context.Background(), t.TempDir(), true)
 	if err == nil {
 		t.Fatalf("expected timeout error, got nil")
 	}
@@ -795,8 +795,8 @@ func TestDownloadThumbnail_TemporaryPNG_DefaultWidth(t *testing.T) {
 	defer srv.Close()
 
 	dest := t.TempDir()
-	w := &Webinfo{ImageURL: srv.URL + "/images/pic.png", UserAgent: ""}
-	out, err := w.DownloadThumbnail(context.Background(), false, dest, 0, true) // width 0 -> default 150
+	w := &Webinfo{ImageURL: srv.URL + "/images/pic.png", UserAgent: "", ForceHTTP11: false}
+	out, err := w.DownloadThumbnail(context.Background(), dest, 0, true) // width 0 -> default 150
 	if err != nil {
 		t.Fatalf("DownloadThumbnail failed: %v", err)
 	}
@@ -835,8 +835,8 @@ func TestDownloadThumbnail_NonTemporaryJPEG_FilenameDerived(t *testing.T) {
 	defer srv.Close()
 
 	dest := t.TempDir()
-	w := &Webinfo{ImageURL: srv.URL + "/images/pic.jpg", UserAgent: ""}
-	out, err := w.DownloadThumbnail(context.Background(), false, dest, 50, false)
+	w := &Webinfo{ImageURL: srv.URL + "/images/pic.jpg", UserAgent: "", ForceHTTP11: false}
+	out, err := w.DownloadThumbnail(context.Background(), dest, 50, false)
 	if err != nil {
 		t.Fatalf("DownloadThumbnail failed: %v", err)
 	}
@@ -869,8 +869,8 @@ func TestDownloadThumbnail_MkdirAllFails(t *testing.T) {
 	// dest path includes the blocker as a path component; MkdirAll should fail
 	dest := filepath.Join(blocker, "nested")
 
-	w := &Webinfo{ImageURL: "http://example.invalid/img.png"}
-	_, err := w.DownloadThumbnail(context.Background(), false, dest, 100, true)
+	w := &Webinfo{ImageURL: "http://example.invalid/img.png", ForceHTTP11: false}
+	_, err := w.DownloadThumbnail(context.Background(), dest, 100, true)
 	if err == nil {
 		t.Fatalf("expected error when MkdirAll cannot create directories, got nil")
 	}
@@ -887,8 +887,8 @@ func TestDownloadThumbnail_BaseFallbackWhenURLHasNoBasename(t *testing.T) {
 
 	dest := t.TempDir()
 	// URL ends with '/', so basename logic should fall back to "webinfo-image"
-	w := &Webinfo{ImageURL: srv.URL + "/"}
-	out, err := w.DownloadThumbnail(context.Background(), false, dest, 30, false)
+	w := &Webinfo{ImageURL: srv.URL + "/", ForceHTTP11: false}
+	out, err := w.DownloadThumbnail(context.Background(), dest, 30, false)
 	if err != nil {
 		t.Fatalf("DownloadThumbnail failed: %v", err)
 	}
@@ -900,8 +900,8 @@ func TestDownloadThumbnail_BaseFallbackWhenURLHasNoBasename(t *testing.T) {
 }
 
 func TestDownloadImage_NoImageURL(t *testing.T) {
-	w := &Webinfo{ImageURL: ""}
-	_, err := w.DownloadImage(context.Background(), false, "", true)
+	w := &Webinfo{ImageURL: "", ForceHTTP11: false}
+	_, err := w.DownloadImage(context.Background(), t.TempDir(), true)
 	if err == nil {
 		t.Fatalf("expected error for empty ImageURL, got nil")
 	}
@@ -925,8 +925,8 @@ func TestDownloadThumbnail_ZeroOrigDimensions(t *testing.T) {
 		return zeroImg{}, "png", nil
 	}
 
-	w := &Webinfo{ImageURL: srv.URL + "/img.png"}
-	_, err := w.DownloadThumbnail(context.Background(), false, t.TempDir(), 50, true)
+	w := &Webinfo{ImageURL: srv.URL + "/img.png", ForceHTTP11: false}
+	_, err := w.DownloadThumbnail(context.Background(), t.TempDir(), 50, true)
 	if err == nil {
 		t.Fatalf("expected error when decoded image has zero dimension, got nil")
 	}
@@ -943,8 +943,8 @@ func TestDownloadThumbnail_HeightClampedToOne(t *testing.T) {
 	defer srv.Close()
 
 	dest := t.TempDir()
-	w := &Webinfo{ImageURL: srv.URL + "/images/wide.png"}
-	out, err := w.DownloadThumbnail(context.Background(), false, dest, 1, true)
+	w := &Webinfo{ImageURL: srv.URL + "/images/wide.png", ForceHTTP11: false}
+	out, err := w.DownloadThumbnail(context.Background(), dest, 1, true)
 	if err != nil {
 		t.Fatalf("DownloadThumbnail failed: %v", err)
 	}
@@ -987,8 +987,8 @@ func TestDownloadThumbnail_CreateFileFailsWhenDestFileReadOnly(t *testing.T) {
 		return orig(temp, dir, pathOrPattern)
 	}
 
-	w := &Webinfo{ImageURL: srv.URL + "/images/pic.png"}
-	_, err := w.DownloadThumbnail(context.Background(), false, dest, 20, false)
+	w := &Webinfo{ImageURL: srv.URL + "/images/pic.png", ForceHTTP11: false}
+	_, err := w.DownloadThumbnail(context.Background(), dest, 20, false)
 	if err == nil {
 		t.Fatalf("expected error when permanent thumbnail creation fails, got nil")
 	}
@@ -1005,9 +1005,9 @@ func TestDownloadThumbnail_SmallDimensions(t *testing.T) {
 	defer srv.Close()
 
 	dest := t.TempDir()
-	w := &Webinfo{ImageURL: srv.URL + "/small.png"}
+	w := &Webinfo{ImageURL: srv.URL + "/small.png", ForceHTTP11: false}
 	// request width 1 (small) and non-temporary output
-	out, err := w.DownloadThumbnail(context.Background(), false, dest, 1, false)
+	out, err := w.DownloadThumbnail(context.Background(), dest, 1, false)
 	if err != nil {
 		t.Fatalf("DownloadThumbnail failed for small dimensions: %v", err)
 	}
@@ -1040,7 +1040,7 @@ func TestDownloadThumbnail_OutputImageFails(t *testing.T) {
 	defer srv.Close()
 
 	dest := t.TempDir()
-	w := &Webinfo{ImageURL: srv.URL + "/img.png"}
+	w := &Webinfo{ImageURL: srv.URL + "/img.png", ForceHTTP11: false}
 
 	// swap out outputImage and restore after test
 	orig := outputImage
@@ -1049,7 +1049,7 @@ func TestDownloadThumbnail_OutputImageFails(t *testing.T) {
 	}
 	defer func() { outputImage = orig }()
 
-	_, err := w.DownloadThumbnail(context.Background(), false, dest, 10, false)
+	_, err := w.DownloadThumbnail(context.Background(), dest, 10, false)
 	if err == nil {
 		t.Fatalf("expected error when outputImage fails, got nil")
 	}
@@ -1057,8 +1057,8 @@ func TestDownloadThumbnail_OutputImageFails(t *testing.T) {
 
 func TestDownloadThumbnail_DownloadImageFails(t *testing.T) {
 	// Use an invalid ImageURL so DownloadImage fails early
-	w := &Webinfo{ImageURL: "://bad-url"}
-	_, err := w.DownloadThumbnail(context.Background(), false, "", 100, true)
+	w := &Webinfo{ImageURL: "://bad-url", ForceHTTP11: false}
+	_, err := w.DownloadThumbnail(context.Background(), t.TempDir(), 100, true)
 	if err == nil {
 		t.Fatalf("expected error when DownloadImage fails, got nil")
 	}
@@ -1074,8 +1074,8 @@ func TestDownloadThumbnail_DecodeFails(t *testing.T) {
 	defer srv.Close()
 
 	dest := t.TempDir()
-	w := &Webinfo{ImageURL: srv.URL + "/not-image"}
-	_, err := w.DownloadThumbnail(context.Background(), false, dest, 50, false)
+	w := &Webinfo{ImageURL: srv.URL + "/not-image", ForceHTTP11: false}
+	_, err := w.DownloadThumbnail(context.Background(), dest, 50, false)
 	if err == nil {
 		t.Fatalf("expected error when decoding original image fails, got nil")
 	}
@@ -1107,8 +1107,8 @@ func TestDownloadThumbnail_WebPFallbackToJPEG(t *testing.T) {
 	defer func() { outputImage = origOutput }()
 
 	dest := t.TempDir()
-	w := &Webinfo{ImageURL: srv.URL + "/img.webp"}
-	out, err := w.DownloadThumbnail(context.Background(), false, dest, 12, false)
+	w := &Webinfo{ImageURL: srv.URL + "/img.webp", ForceHTTP11: false}
+	out, err := w.DownloadThumbnail(context.Background(), dest, 12, false)
 	if err != nil {
 		t.Fatalf("DownloadThumbnail failed: %v", err)
 	}
@@ -1132,8 +1132,8 @@ func TestDownloadThumbnail_TemporaryDefaultDest(t *testing.T) {
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
 
-	w := &Webinfo{ImageURL: srv.URL + "/img.png"}
-	out, err := w.DownloadThumbnail(context.Background(), false, "", 30, true)
+	w := &Webinfo{ImageURL: srv.URL + "/img.png", ForceHTTP11: false}
+	out, err := w.DownloadThumbnail(context.Background(), "", 30, true)
 	if err != nil {
 		t.Fatalf("DownloadThumbnail failed: %v", err)
 	}
@@ -1167,8 +1167,8 @@ func TestImageBytes_HTTP11FlagPropagation(t *testing.T) {
 		return fetch.WithHTTPClient(&http.Client{Timeout: 30 * time.Second})
 	}
 
-	w := &Webinfo{ImageURL: srv.URL + "/img.png"}
-	_, err := w.ImageBytes(context.Background(), true)
+	w := &Webinfo{ImageURL: srv.URL + "/img.png", ForceHTTP11: true}
+	_, err := w.ImageBytes(context.Background())
 	if err != nil {
 		t.Fatalf("ImageBytes failed: %v", err)
 	}
@@ -1199,8 +1199,8 @@ func TestDownloadImage_HTTP11FlagPropagation(t *testing.T) {
 	}
 
 	dest := t.TempDir()
-	w := &Webinfo{ImageURL: srv.URL + "/images/pic.png"}
-	out, err := w.DownloadImage(context.Background(), true, dest, false)
+	w := &Webinfo{ImageURL: srv.URL + "/images/pic.png", ForceHTTP11: true}
+	out, err := w.DownloadImage(context.Background(), dest, false)
 	if err != nil {
 		t.Fatalf("DownloadImage failed: %v", err)
 	}
@@ -1233,8 +1233,8 @@ func TestDownloadThumbnail_HTTP11FlagPropagation(t *testing.T) {
 	}
 
 	dest := t.TempDir()
-	w := &Webinfo{ImageURL: srv.URL + "/images/pic.png"}
-	out, err := w.DownloadThumbnail(context.Background(), true, dest, 20, true)
+	w := &Webinfo{ImageURL: srv.URL + "/images/pic.png", ForceHTTP11: true}
+	out, err := w.DownloadThumbnail(context.Background(), dest, 20, true)
 	if err != nil {
 		t.Fatalf("DownloadThumbnail failed: %v", err)
 	}
@@ -1248,15 +1248,15 @@ func TestDownloadThumbnail_HTTP11FlagPropagation(t *testing.T) {
 }
 
 func TestHTTP11True_BadURL(t *testing.T) {
-	w := &Webinfo{ImageURL: "://bad-url"}
+	w := &Webinfo{ImageURL: "://bad-url", ForceHTTP11: true}
 
-	if _, err := w.ImageBytes(context.Background(), true); err == nil {
+	if _, err := w.ImageBytes(context.Background()); err == nil {
 		t.Fatalf("expected error for ImageBytes with bad URL")
 	}
-	if _, err := w.DownloadImage(context.Background(), true, t.TempDir(), false); err == nil {
+	if _, err := w.DownloadImage(context.Background(), t.TempDir(), false); err == nil {
 		t.Fatalf("expected error for DownloadImage with bad URL")
 	}
-	if _, err := w.DownloadThumbnail(context.Background(), true, t.TempDir(), 50, true); err == nil {
+	if _, err := w.DownloadThumbnail(context.Background(), t.TempDir(), 50, true); err == nil {
 		t.Fatalf("expected error for DownloadThumbnail with bad URL")
 	}
 }

@@ -12,7 +12,7 @@ import (
 func main() {
 	ctx := context.Background()
 	// Fetch metadata for a page (empty UA uses default)
-	info, err := webinfo.Fetch(ctx, "https://text.baldanders.info/", "")
+	info, err := webinfo.Fetch(ctx, "https://text.baldanders.info/", "", false)
 	if err != nil {
 		fmt.Printf("%+v\n", err)
 		return
