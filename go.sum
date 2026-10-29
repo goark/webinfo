@@ -4,13 +4,13 @@ github.com/andybalholm/cascadia v1.3.5 h1:RLjq12WJy58dN6eCIQrz0bAGZkztHWsEPFxP53
 github.com/andybalholm/cascadia v1.3.5/go.mod h1:BLRmbRjpEtNKieZOCCvYj4RqN+KRA41GBe/5O+G93kM=
 github.com/goark/errs v1.3.4 h1:/+/xwF3UwXGxGGLurzBTaMMoryTBeaPfheJ1aW9cglA=
 github.com/goark/errs v1.3.4/go.mod h1:4xM7rorwYQlqh9kUhfKpC5P7VAJW2KfvuQpYnTaU0ek=
-github.com/goark/fetch v0.6.0 h1:tCIWv23wPRF6ousw+KfBx7xvtiUVqBVo5xYtWEp1IxA=
-github.com/goark/fetch v0.6.0/go.mod h1:Iviw2ulS/cAxl/6MBu3bP3ybACfw9p9MruSmDVfqf4Q=
+github.com/goark/fetch v0.6.1 h1:h3txcPsJC8qKIyBkiW4pucMFn1MF1rPnL5gACTnJguw=
+github.com/goark/fetch v0.6.1/go.mod h1:DAZuZVe2gTRZSHlGxZzDcnwPX8HVqM4jYeHKt+C7wmY=
 github.com/mattn/go-encoding v0.0.2 h1:OC1L+QXLJge9n7yIE3R5Os/UNasUeFvK3Sa4NjbDi6c=
 github.com/mattn/go-encoding v0.0.2/go.mod h1:WUNsdPQLK4JYRzkn8IAdmYKFYGGJ4/9YPxdPoMumPgY=
 golang.org/x/image v0.47.0 h1:za/8gVz++PPZqmZJBNSISICN5Rrj5zixP/8K++fgmqo=
 golang.org/x/image v0.47.0/go.mod h1:IkN5o4A7vq55vXN8FWjjnhg9Rs2GOtffqsSi9mWAKYE=
-golang.org/x/net v0.61.0 h1:RR+6j/BTBCrggOLugxa+66R8FvoN6MHlzDlZIbN9YFw=
-golang.org/x/net v0.61.0/go.mod h1:WgDCOTH8iwtB66T4/GfI94AHo/hhdb7Hah9NDseQfiI=
+golang.org/x/net v0.62.0 h1:18ELalfM5+XNRwzM2nYqXsZQ9ByS1uhj2O/U7+5jqRY=
+golang.org/x/net v0.62.0/go.mod h1:WgDCOTH8iwtB66T4/GfI94AHo/hhdb7Hah9NDseQfiI=
 golang.org/x/text v0.43.0 h1:1QivrlhwAsnMOcqgOdl9my7s9OyZl8O5/UGUTJVXoWc=
 golang.org/x/text v0.43.0/go.mod h1:hbSIYA/amXcRXTFSZqh8tWHEoqRvvbKPJ2uz/KU+a+s=
